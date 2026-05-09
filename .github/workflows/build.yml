@@ -26,6 +26,9 @@ jobs:
         uses: jakoch/install-vulkan-sdk-action@v1
         with:
           vulkan_version: 1.3.290.0
+          # Volk, VMA and GLM are optional LunarG components — required because
+          # CMakeLists.txt includes them from ${VULKAN_SDK}/Include/{Volk,vma,glm}.
+          optional_components: com.lunarg.vulkan.volk,com.lunarg.vulkan.vma,com.lunarg.vulkan.glm
           install_runtime: true
           cache: true
           stripdown: true
