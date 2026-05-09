@@ -1,5 +1,7 @@
 # Cosmico
 
+[![Build](https://github.com/kalexis1994/cosmico/actions/workflows/build.yml/badge.svg)](https://github.com/kalexis1994/cosmico/actions/workflows/build.yml)
+
 A real-time cosmological simulation engine with an interactive node-based pipeline editor. Built in C++20 / CUDA on top of Vulkan and ImGui.
 
 Cosmico ships seven compute backends — direct N-body, Barnes-Hut, Particle-Mesh (FFT), Inflation, 2D and 3D Causal Dynamical Triangulations, and a visual node-graph builder — each wrapped in a gallery launcher with deep-dive science papers, recording/playback, and a dockable 3D viewport.
