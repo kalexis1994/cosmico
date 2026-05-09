@@ -1183,9 +1183,13 @@ void SciencePanel::renderDocument(Document& doc) {
 // =====================================================================
 
 void SciencePanel::render(ComputeBackend backend) {
-    // Periodically check for file changes (~every 60 frames)
+    // Hot-reload check costs a Windows file-stat syscall (~ms occasional
+    // spike). At every 60 frames it surfaced as a 1 Hz micro-stutter.
+    // Papers are rarely edited live, so 600 frames (~10 s at 60 fps) is
+    // plenty for an interactive author workflow without disturbing the
+    // simulation framerate.
     m_reloadCounter++;
-    bool doReload = (m_reloadCounter % 60 == 0);
+    bool doReload = (m_reloadCounter % 600 == 0);
 
     if (m_papersDir.empty()) return;
 
