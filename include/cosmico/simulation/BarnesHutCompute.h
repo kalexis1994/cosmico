@@ -69,7 +69,11 @@ private:
     bool m_diagPending = false;        // a readback is in flight
     bool m_baselineCaptured = false;   // initialEnergy populated yet
 
-    int m_diagInterval = 4;            // run diagnostics every Nth step
+    // Run diagnostics every Nth step. The PE kernel walks the octree at
+    // a cost comparable to forceKernel, so frequent runs cause periodic
+    // micro-stutters. 30 gives ~2 samples/sec at 60fps — plenty for a
+    // slowly-changing drift indicator without disturbing framerate.
+    int m_diagInterval = 30;
 
     int m_maxParticles = 0;
     int m_particleCount = 0;
