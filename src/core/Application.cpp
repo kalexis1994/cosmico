@@ -589,6 +589,10 @@ void Application::mainLoop() {
                                                 m_simulation->zeldovichGrowth(),
                                                 zeldovichRequested,
                                                 zeldovichStopRequested);
+                } else if (currentBackend == ComputeBackend::BarnesHut) {
+                    m_debugUI->renderBarnesHut(m_simulation->params(), m_timer->fps(), m_paused,
+                                                currentBackend, resetRequested,
+                                                m_simulation->barnesHutStats());
                 } else {
                     m_debugUI->render(m_simulation->params(), m_timer->fps(), m_paused,
                                       currentBackend, resetRequested,

@@ -5,6 +5,8 @@
 #include <cosmico/simulation/PMParams.h>
 #include <cosmico/simulation/CDT2DParams.h>
 #include <cosmico/simulation/CDT3DParams.h>
+#include <cstdint>
+#include <vector>
 
 namespace cosmico {
 
@@ -15,6 +17,7 @@ struct InflationStateData;
 struct PMStateData;
 struct CDT2DStateData;
 struct CDT3DStateData;
+struct BarnesHutStats;
 
 class DebugUI {
 public:
@@ -22,6 +25,10 @@ public:
                 ComputeBackend backend,
                 bool& resetRequested,
                 float cudaKernelTimeMs, int cudaTreeNodeCount);
+
+    void renderBarnesHut(SimulationParams& params, float fps, bool& paused,
+                         ComputeBackend backend, bool& resetRequested,
+                         const BarnesHutStats* stats);
 
     void renderInflation(InflationParams& params, float fps, bool& paused,
                          ComputeBackend backend, bool& resetRequested,
@@ -49,6 +56,15 @@ public:
 
     // Set by any render method when user clicks "Back to Gallery"
     bool backToGalleryRequested = false;
+
+private:
+    // Rolling history of E_total and momentum magnitude for the
+    // Barnes-Hut diagnostics plots. Cleared when stats->stepCount
+    // resets to a smaller value (i.e. user reset the simulation).
+    std::vector<float> m_bhEnergyHistory;
+    std::vector<float> m_bhMomentumHistory;
+    uint64_t m_bhLastStep = 0;
+    static constexpr int kBhHistMax = 256;
 };
 
 } // namespace cosmico

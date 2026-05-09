@@ -37,6 +37,18 @@ struct BoundingBox {
     float maxX, maxY, maxZ;
 };
 
+// Per-step accumulator for energy / momentum / center-of-mass diagnostics.
+// Computed by walking the existing octree, so cost is comparable to the
+// force kernel. Doubles for accumulation precision; the host divides
+// pe by 2 since pairs (i,j) and (j,i) are both counted by the tree walk.
+struct DiagnosticsAccum {
+    double ke;          // kinetic energy = 0.5 * sum(m_i * v_i^2)
+    double pe;          // potential energy * 2 (host halves it)
+    double px, py, pz;  // total momentum components
+    double mx, my, mz;  // sum(m_i * r_i) — used to derive COM
+    double m;           // total mass
+};
+
 // Host-callable wrapper for the entire Barnes-Hut pipeline
 void launchBarnesHutStep(
     ParticleGpu* particles,
@@ -44,6 +56,18 @@ void launchBarnesHutStep(
     BoundingBox* d_bbox,
     int* d_nodeCounter,
     const BarnesHutParams& params,
+    cudaStream_t stream
+);
+
+// Compute per-step diagnostics. Reads the freshly-built tree from
+// launchBarnesHutStep, so call this AFTER launchBarnesHutStep on the
+// same stream to reuse the up-to-date tree.
+void launchDiagnostics(
+    const ParticleGpu* particles,
+    const OctreeNode* nodes,
+    const BarnesHutParams& params,
+    int rootIdx,
+    DiagnosticsAccum* d_accum,
     cudaStream_t stream
 );
 

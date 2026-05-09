@@ -535,5 +535,151 @@ size_t getTreeMemorySize(int particleCount) {
     return static_cast<size_t>(maxNodes) * sizeof(OctreeNode);
 }
 
+// ─── Diagnostics kernel: KE, PE (tree walk), momentum, mass*pos ─────
+//
+// One thread per particle. Walks the existing octree to accumulate the
+// particle's potential energy under the same Barnes-Hut approximation
+// used by forceKernel — so PE quality matches the force quality.
+//
+// Block-local reductions across nine doubles are reduced via shared
+// memory then atomically added to a single global DiagnosticsAccum.
+// Requires CC >= 6.0 (atomicAdd on double); our build targets 75/86/89.
+
+__global__ void diagnosticsKernel(
+    const ParticleGpu* __restrict__ particles,
+    const OctreeNode* __restrict__ nodes,
+    float G, float softening, float theta,
+    int N, int rootIdx,
+    DiagnosticsAccum* __restrict__ accum)
+{
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = threadIdx.x;
+
+    __shared__ double s_ke[BLOCK_SIZE];
+    __shared__ double s_pe[BLOCK_SIZE];
+    __shared__ double s_px[BLOCK_SIZE];
+    __shared__ double s_py[BLOCK_SIZE];
+    __shared__ double s_pz[BLOCK_SIZE];
+    __shared__ double s_mx[BLOCK_SIZE];
+    __shared__ double s_my[BLOCK_SIZE];
+    __shared__ double s_mz[BLOCK_SIZE];
+    __shared__ double s_m [BLOCK_SIZE];
+
+    double t_ke = 0.0, t_pe = 0.0;
+    double t_px = 0.0, t_py = 0.0, t_pz = 0.0;
+    double t_mx = 0.0, t_my = 0.0, t_mz = 0.0, t_m = 0.0;
+
+    if (gid < N) {
+        const ParticleGpu p = particles[gid];
+        double m = (double)p.mass;
+        double vx = (double)p.vx, vy = (double)p.vy, vz = (double)p.vz;
+        double px = (double)p.px, py = (double)p.py, pz = (double)p.pz;
+
+        t_ke = 0.5 * m * (vx * vx + vy * vy + vz * vz);
+        t_px = m * vx; t_py = m * vy; t_pz = m * vz;
+        t_mx = m * px; t_my = m * py; t_mz = m * pz;
+        t_m  = m;
+
+        // Tree walk for PE — mirrors forceKernel structure.
+        float fpx = p.px, fpy = p.py, fpz = p.pz;
+        float soft2 = softening * softening;
+        float theta2 = theta * theta;
+
+        int stack[MAX_STACK_DEPTH];
+        int stackTop = 0;
+        stack[stackTop++] = rootIdx;
+
+        double pe = 0.0;
+        while (stackTop > 0) {
+            int nodeIdx = stack[--stackTop];
+            if (nodeIdx < 0) continue;
+
+            const OctreeNode& node = nodes[nodeIdx];
+            if (node.mass <= 0.0f) continue;
+
+            // Single-particle leaf
+            if (node.startIdx >= 0 && node.particleCount == 1) {
+                if (node.startIdx == gid) continue;
+                float dx = node.cx - fpx;
+                float dy = node.cy - fpy;
+                float dz = node.cz - fpz;
+                float r2 = dx * dx + dy * dy + dz * dz + soft2;
+                float invR = rsqrtf(r2);
+                pe += -(double)G * m * (double)node.mass * (double)invR;
+                continue;
+            }
+
+            float sizeX = node.maxX - node.minX;
+            float sizeY = node.maxY - node.minY;
+            float sizeZ = node.maxZ - node.minZ;
+            float s = fmaxf(sizeX, fmaxf(sizeY, sizeZ));
+
+            float dx = node.cx - fpx;
+            float dy = node.cy - fpy;
+            float dz = node.cz - fpz;
+            float d2 = dx * dx + dy * dy + dz * dz;
+
+            if (s * s < theta2 * d2) {
+                float r2 = d2 + soft2;
+                float invR = rsqrtf(r2);
+                pe += -(double)G * m * (double)node.mass * (double)invR;
+            } else {
+                for (int c = 7; c >= 0; c--) {
+                    if (node.children[c] >= 0 && stackTop < MAX_STACK_DEPTH) {
+                        stack[stackTop++] = node.children[c];
+                    }
+                }
+            }
+        }
+        t_pe = pe;
+    }
+
+    s_ke[tid] = t_ke; s_pe[tid] = t_pe;
+    s_px[tid] = t_px; s_py[tid] = t_py; s_pz[tid] = t_pz;
+    s_mx[tid] = t_mx; s_my[tid] = t_my; s_mz[tid] = t_mz;
+    s_m [tid] = t_m;
+    __syncthreads();
+
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            s_ke[tid] += s_ke[tid + s]; s_pe[tid] += s_pe[tid + s];
+            s_px[tid] += s_px[tid + s]; s_py[tid] += s_py[tid + s]; s_pz[tid] += s_pz[tid + s];
+            s_mx[tid] += s_mx[tid + s]; s_my[tid] += s_my[tid + s]; s_mz[tid] += s_mz[tid + s];
+            s_m [tid] += s_m [tid + s];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        atomicAdd(&accum->ke, s_ke[0]);
+        atomicAdd(&accum->pe, s_pe[0]);
+        atomicAdd(&accum->px, s_px[0]);
+        atomicAdd(&accum->py, s_py[0]);
+        atomicAdd(&accum->pz, s_pz[0]);
+        atomicAdd(&accum->mx, s_mx[0]);
+        atomicAdd(&accum->my, s_my[0]);
+        atomicAdd(&accum->mz, s_mz[0]);
+        atomicAdd(&accum->m,  s_m [0]);
+    }
+}
+
+void launchDiagnostics(
+    const ParticleGpu* particles,
+    const OctreeNode* nodes,
+    const BarnesHutParams& params,
+    int rootIdx,
+    DiagnosticsAccum* d_accum,
+    cudaStream_t stream)
+{
+    int N = params.particleCount;
+    if (N <= 0) return;
+
+    // Caller is responsible for zeroing d_accum before calling.
+    int numBlocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    diagnosticsKernel<<<numBlocks, BLOCK_SIZE, 0, stream>>>(
+        particles, nodes, params.G, params.softening, params.theta,
+        N, rootIdx, d_accum);
+}
+
 } // namespace cuda
 } // namespace cosmico

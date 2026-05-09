@@ -389,6 +389,7 @@ void Simulation::reset(VkContext& ctx, InitialCondition ic) {
     } else if (m_backend == ComputeBackend::BarnesHut && m_particles->isExportable()) {
         m_particles->uploadExportable(ctx, data.data(), static_cast<uint32_t>(m_params.particleCount));
         m_bhCompute->updateParticleCount(m_params.particleCount);
+        m_bhCompute->resetDiagnostics();   // re-baseline drift / sim time
         m_semaphoreValue = 0;
     } else {
         m_particles->upload(ctx, data.data(), static_cast<uint32_t>(m_params.particleCount));
@@ -445,6 +446,10 @@ float Simulation::cudaKernelTimeMs() const {
 
 int Simulation::cudaTreeNodeCount() const {
     return m_bhCompute ? m_bhCompute->stats().nodeCount : 0;
+}
+
+const BarnesHutStats* Simulation::barnesHutStats() const {
+    return m_bhCompute ? &m_bhCompute->stats() : nullptr;
 }
 
 const InflationStateData* Simulation::inflationState() const {

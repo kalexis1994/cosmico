@@ -89,6 +89,8 @@ public:
     // Get CUDA kernel stats
     float cudaKernelTimeMs() const;
     int cudaTreeNodeCount() const;
+    // Full Barnes-Hut diagnostics (energy, momentum, COM, sim time, …)
+    const struct BarnesHutStats* barnesHutStats() const;
 
     // PM backend
     PMParams& pmParams() { return m_pmParams; }
