@@ -541,9 +541,29 @@ size_t getTreeMemorySize(int particleCount) {
 // particle's potential energy under the same Barnes-Hut approximation
 // used by forceKernel — so PE quality matches the force quality.
 //
-// Block-local reductions across nine doubles are reduced via shared
-// memory then atomically added to a single global DiagnosticsAccum.
-// Requires CC >= 6.0 (atomicAdd on double); our build targets 75/86/89.
+// Reduction strategy (warp shuffle + tiny shared mem):
+//   1. Each thread accumulates 9 doubles (KE, PE, p_xyz, mr_xyz, m).
+//   2. Each warp reduces in-register via __shfl_xor_sync (no shared mem).
+//   3. Lane 0 of each warp writes its sum to a small shared buffer
+//      (9 quantities * 8 warps for BLOCK_SIZE=256 = 576 bytes total).
+//   4. The first warp loads those 8 partials and warp-reduces again.
+//   5. Lane 0 atomicAdds the block totals to the global accumulator.
+//
+// The earlier implementation kept a full BLOCK_SIZE-wide shared array
+// per quantity (~18 KB shared/block), which capped the kernel to ~3
+// blocks/SM. The shuffle version uses ~576 B/block and lets the
+// scheduler hit the register-bound occupancy of a Turing/Ampere/Ada SM.
+// atomicAdd on double requires CC>=6.0; our build targets 75/86/89.
+
+__device__ inline double warpReduceSumD(double v) {
+    // 32-lane reduction across a warp using XOR butterfly.
+    v += __shfl_xor_sync(0xFFFFFFFFu, v, 16);
+    v += __shfl_xor_sync(0xFFFFFFFFu, v, 8);
+    v += __shfl_xor_sync(0xFFFFFFFFu, v, 4);
+    v += __shfl_xor_sync(0xFFFFFFFFu, v, 2);
+    v += __shfl_xor_sync(0xFFFFFFFFu, v, 1);
+    return v;
+}
 
 __global__ void diagnosticsKernel(
     const ParticleGpu* __restrict__ particles,
@@ -554,16 +574,6 @@ __global__ void diagnosticsKernel(
 {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int tid = threadIdx.x;
-
-    __shared__ double s_ke[BLOCK_SIZE];
-    __shared__ double s_pe[BLOCK_SIZE];
-    __shared__ double s_px[BLOCK_SIZE];
-    __shared__ double s_py[BLOCK_SIZE];
-    __shared__ double s_pz[BLOCK_SIZE];
-    __shared__ double s_mx[BLOCK_SIZE];
-    __shared__ double s_my[BLOCK_SIZE];
-    __shared__ double s_mz[BLOCK_SIZE];
-    __shared__ double s_m [BLOCK_SIZE];
 
     double t_ke = 0.0, t_pe = 0.0;
     double t_px = 0.0, t_py = 0.0, t_pz = 0.0;
@@ -634,32 +644,63 @@ __global__ void diagnosticsKernel(
         t_pe = pe;
     }
 
-    s_ke[tid] = t_ke; s_pe[tid] = t_pe;
-    s_px[tid] = t_px; s_py[tid] = t_py; s_pz[tid] = t_pz;
-    s_mx[tid] = t_mx; s_my[tid] = t_my; s_mz[tid] = t_mz;
-    s_m [tid] = t_m;
+    // ── Step 1: warp-level reduction (no shared memory) ──
+    t_ke = warpReduceSumD(t_ke); t_pe = warpReduceSumD(t_pe);
+    t_px = warpReduceSumD(t_px); t_py = warpReduceSumD(t_py); t_pz = warpReduceSumD(t_pz);
+    t_mx = warpReduceSumD(t_mx); t_my = warpReduceSumD(t_my); t_mz = warpReduceSumD(t_mz);
+    t_m  = warpReduceSumD(t_m);
+
+    // ── Step 2: each warp's lane 0 stores its partial sum ──
+    constexpr int WARPS_PER_BLOCK = BLOCK_SIZE / 32;
+    __shared__ double s_ke[WARPS_PER_BLOCK];
+    __shared__ double s_pe[WARPS_PER_BLOCK];
+    __shared__ double s_px[WARPS_PER_BLOCK];
+    __shared__ double s_py[WARPS_PER_BLOCK];
+    __shared__ double s_pz[WARPS_PER_BLOCK];
+    __shared__ double s_mx[WARPS_PER_BLOCK];
+    __shared__ double s_my[WARPS_PER_BLOCK];
+    __shared__ double s_mz[WARPS_PER_BLOCK];
+    __shared__ double s_m [WARPS_PER_BLOCK];
+
+    int warpId = tid >> 5;     // tid / 32
+    int lane   = tid & 31;     // tid % 32
+
+    if (lane == 0) {
+        s_ke[warpId] = t_ke; s_pe[warpId] = t_pe;
+        s_px[warpId] = t_px; s_py[warpId] = t_py; s_pz[warpId] = t_pz;
+        s_mx[warpId] = t_mx; s_my[warpId] = t_my; s_mz[warpId] = t_mz;
+        s_m [warpId] = t_m;
+    }
     __syncthreads();
 
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            s_ke[tid] += s_ke[tid + s]; s_pe[tid] += s_pe[tid + s];
-            s_px[tid] += s_px[tid + s]; s_py[tid] += s_py[tid + s]; s_pz[tid] += s_pz[tid + s];
-            s_mx[tid] += s_mx[tid + s]; s_my[tid] += s_my[tid + s]; s_mz[tid] += s_mz[tid + s];
-            s_m [tid] += s_m [tid + s];
-        }
-        __syncthreads();
-    }
+    // ── Step 3: first warp reduces the per-warp partials and emits ──
+    if (warpId == 0) {
+        double v_ke = (lane < WARPS_PER_BLOCK) ? s_ke[lane] : 0.0;
+        double v_pe = (lane < WARPS_PER_BLOCK) ? s_pe[lane] : 0.0;
+        double v_px = (lane < WARPS_PER_BLOCK) ? s_px[lane] : 0.0;
+        double v_py = (lane < WARPS_PER_BLOCK) ? s_py[lane] : 0.0;
+        double v_pz = (lane < WARPS_PER_BLOCK) ? s_pz[lane] : 0.0;
+        double v_mx = (lane < WARPS_PER_BLOCK) ? s_mx[lane] : 0.0;
+        double v_my = (lane < WARPS_PER_BLOCK) ? s_my[lane] : 0.0;
+        double v_mz = (lane < WARPS_PER_BLOCK) ? s_mz[lane] : 0.0;
+        double v_m  = (lane < WARPS_PER_BLOCK) ? s_m [lane] : 0.0;
 
-    if (tid == 0) {
-        atomicAdd(&accum->ke, s_ke[0]);
-        atomicAdd(&accum->pe, s_pe[0]);
-        atomicAdd(&accum->px, s_px[0]);
-        atomicAdd(&accum->py, s_py[0]);
-        atomicAdd(&accum->pz, s_pz[0]);
-        atomicAdd(&accum->mx, s_mx[0]);
-        atomicAdd(&accum->my, s_my[0]);
-        atomicAdd(&accum->mz, s_mz[0]);
-        atomicAdd(&accum->m,  s_m [0]);
+        v_ke = warpReduceSumD(v_ke); v_pe = warpReduceSumD(v_pe);
+        v_px = warpReduceSumD(v_px); v_py = warpReduceSumD(v_py); v_pz = warpReduceSumD(v_pz);
+        v_mx = warpReduceSumD(v_mx); v_my = warpReduceSumD(v_my); v_mz = warpReduceSumD(v_mz);
+        v_m  = warpReduceSumD(v_m);
+
+        if (lane == 0) {
+            atomicAdd(&accum->ke, v_ke);
+            atomicAdd(&accum->pe, v_pe);
+            atomicAdd(&accum->px, v_px);
+            atomicAdd(&accum->py, v_py);
+            atomicAdd(&accum->pz, v_pz);
+            atomicAdd(&accum->mx, v_mx);
+            atomicAdd(&accum->my, v_my);
+            atomicAdd(&accum->mz, v_mz);
+            atomicAdd(&accum->m,  v_m);
+        }
     }
 }
 
