@@ -161,15 +161,21 @@ void DebugUI::renderBarnesHut(SimulationParams& params, float fps, bool& paused,
     if (!stats || !stats->diagValid) {
         ImGui::TextDisabled("Computing... (run a few steps)");
     } else {
-        // Detect reset of underlying sim — clear plot history.
-        if (stats->stepCount < m_bhLastStep) {
+        // Push history only when the backend reports a fresh sample
+        // (diagSampleCount advances). This makes each plot point a real
+        // diag tick rather than a frame, so plots scroll smoothly
+        // instead of holding the same value for ~30 frames then jumping.
+        if (stats->diagSampleCount < m_bhLastSampleSeen) {
+            // Reset detected (counter went backwards).
             m_bhEnergyHistory.clear();
             m_bhMomentumHistory.clear();
+            m_bhLastSampleSeen = 0;
         }
-        m_bhLastStep = stats->stepCount;
-
-        pushHistory(m_bhEnergyHistory, static_cast<float>(stats->totalEnergy), kBhHistMax);
-        pushHistory(m_bhMomentumHistory, static_cast<float>(stats->momentumMag), kBhHistMax);
+        if (stats->diagSampleCount > m_bhLastSampleSeen) {
+            pushHistory(m_bhEnergyHistory, static_cast<float>(stats->totalEnergy), kBhHistMax);
+            pushHistory(m_bhMomentumHistory, static_cast<float>(stats->momentumMag), kBhHistMax);
+            m_bhLastSampleSeen = stats->diagSampleCount;
+        }
 
         ImGui::Text("Energy");
         ImGui::Text("  KE = %.4e", stats->kineticEnergy);

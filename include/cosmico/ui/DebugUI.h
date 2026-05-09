@@ -59,11 +59,15 @@ public:
 
 private:
     // Rolling history of E_total and momentum magnitude for the
-    // Barnes-Hut diagnostics plots. Cleared when stats->stepCount
-    // resets to a smaller value (i.e. user reset the simulation).
+    // Barnes-Hut diagnostics plots. We only push a new point when the
+    // backend reports a fresh sample (diagSampleCount advances), so
+    // each plot index corresponds to one actual diag tick instead of
+    // one render frame — avoids the visible step pattern of duplicate
+    // values held for ~30 frames between samples. Cleared when
+    // diagSampleCount resets backwards (user reset the simulation).
     std::vector<float> m_bhEnergyHistory;
     std::vector<float> m_bhMomentumHistory;
-    uint64_t m_bhLastStep = 0;
+    uint64_t m_bhLastSampleSeen = 0;
     static constexpr int kBhHistMax = 256;
 };
 

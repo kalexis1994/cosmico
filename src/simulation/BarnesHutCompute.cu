@@ -31,12 +31,19 @@ void BarnesHutCompute::init(int maxParticles) {
     // Allocate node counter
     CUDA_CHECK(cudaMalloc(&m_nodeCounter, sizeof(int)));
 
-    // Diagnostics: device accumulator + pinned host mirror + completion event
+    // Diagnostics: device accumulator + pinned host mirror + completion
+    // event, all on a dedicated stream so the render path's sync of the
+    // simulation stream is unaffected by PE work.
     CUDA_CHECK(cudaMalloc(&m_diagAccumDev, sizeof(cuda::DiagnosticsAccum)));
     CUDA_CHECK(cudaMallocHost(&m_diagAccumHost, sizeof(cuda::DiagnosticsAccum)));
-    cudaEvent_t diagEvent;
-    CUDA_CHECK(cudaEventCreate(&diagEvent));
+    cudaStream_t diagStream;
+    CUDA_CHECK(cudaStreamCreateWithFlags(&diagStream, cudaStreamNonBlocking));
+    m_diagStream = diagStream;
+    cudaEvent_t diagEvent, treeBuiltEvent;
+    CUDA_CHECK(cudaEventCreateWithFlags(&diagEvent, cudaEventDisableTiming));
+    CUDA_CHECK(cudaEventCreateWithFlags(&treeBuiltEvent, cudaEventDisableTiming));
     m_diagEvent = diagEvent;
+    m_treeBuiltEvent = treeBuiltEvent;
 
     // Create CUDA events for kernel timing
     cudaEvent_t start, stop;
@@ -58,9 +65,18 @@ void BarnesHutCompute::destroy() {
         cudaEventDestroy(static_cast<cudaEvent_t>(m_stopEvent));
         m_stopEvent = nullptr;
     }
+    if (m_treeBuiltEvent) {
+        cudaEventDestroy(static_cast<cudaEvent_t>(m_treeBuiltEvent));
+        m_treeBuiltEvent = nullptr;
+    }
     if (m_diagEvent) {
         cudaEventDestroy(static_cast<cudaEvent_t>(m_diagEvent));
         m_diagEvent = nullptr;
+    }
+    if (m_diagStream) {
+        cudaStreamSynchronize(static_cast<cudaStream_t>(m_diagStream));
+        cudaStreamDestroy(static_cast<cudaStream_t>(m_diagStream));
+        m_diagStream = nullptr;
     }
     if (m_diagAccumHost) {
         cudaFreeHost(m_diagAccumHost);
@@ -105,8 +121,15 @@ void BarnesHutCompute::updateParticleCount(int count) {
 }
 
 void BarnesHutCompute::resetDiagnostics() {
+    // Drain any in-flight diagnostics work so post-reset launches start
+    // from a clean slate (no race between a stale diag write and a fresh
+    // memset on the device accumulator).
+    if (m_diagStream) {
+        cudaStreamSynchronize(static_cast<cudaStream_t>(m_diagStream));
+    }
     m_stats.stepCount = 0;
     m_stats.simTime = 0.0;
+    m_stats.diagSampleCount = 0;
     m_stats.diagValid = false;
     m_stats.kineticEnergy = 0.0;
     m_stats.potentialEnergy = 0.0;
@@ -153,8 +176,17 @@ void BarnesHutCompute::step(const SimulationParams& params, void* cudaStream) {
             m_stats.energyDrift = (e0 > 1e-30)
                 ? (m_stats.totalEnergy - m_stats.initialEnergy) / e0 : 0.0;
             m_stats.diagValid = true;
+            m_stats.diagSampleCount++;
             m_diagPending = false;
         }
+    }
+
+    // ── Sim stream defers tree-clearing if a diag walk is in flight ──
+    // Queue-ahead wait: doesn't block the CPU. If diag is already done
+    // (the typical case), the sim stream proceeds immediately.
+    if (m_diagPending) {
+        cudaStreamWaitEvent(stream,
+            static_cast<cudaEvent_t>(m_diagEvent), 0);
     }
 
     // Record start event
@@ -179,15 +211,23 @@ void BarnesHutCompute::step(const SimulationParams& params, void* cudaStream) {
         stream
     );
 
-    // Record stop event
+    // Record stop event (kernel timing covers only the simulation work,
+    // not the diagnostics — that's a feature: kernel ms reflects the
+    // critical-path cost the renderer sees).
     CUDA_CHECK(cudaEventRecord(static_cast<cudaEvent_t>(m_stopEvent), stream));
 
-    // ── Queue diagnostics on the same stream every diagInterval steps ──
-    // The tree built by launchBarnesHutStep is reused; drift is measured
-    // post-step so what's reported matches the position/velocity that the
-    // renderer just drew.
+    // Mark "tree + particles ready" for the diagnostics stream to chain on.
+    CUDA_CHECK(cudaEventRecord(
+        static_cast<cudaEvent_t>(m_treeBuiltEvent), stream));
+
+    // ── Diagnostics on the dedicated stream, off the render's critical path ──
     if (!m_diagPending && (m_stats.stepCount % m_diagInterval == 0)) {
-        cudaMemsetAsync(m_diagAccumDev, 0, sizeof(cuda::DiagnosticsAccum), stream);
+        cudaStream_t diagStream = static_cast<cudaStream_t>(m_diagStream);
+        // Diag stream waits for the sim's just-built tree before walking.
+        cudaStreamWaitEvent(diagStream,
+            static_cast<cudaEvent_t>(m_treeBuiltEvent), 0);
+
+        cudaMemsetAsync(m_diagAccumDev, 0, sizeof(cuda::DiagnosticsAccum), diagStream);
         int rootIdx = m_particleCount; // matches launchBarnesHutStep convention
         cuda::launchDiagnostics(
             static_cast<const cuda::ParticleGpu*>(m_particlePtr),
@@ -195,12 +235,13 @@ void BarnesHutCompute::step(const SimulationParams& params, void* cudaStream) {
             bhParams,
             rootIdx,
             static_cast<cuda::DiagnosticsAccum*>(m_diagAccumDev),
-            stream
+            diagStream
         );
         cudaMemcpyAsync(m_diagAccumHost, m_diagAccumDev,
                         sizeof(cuda::DiagnosticsAccum),
-                        cudaMemcpyDeviceToHost, stream);
-        CUDA_CHECK(cudaEventRecord(static_cast<cudaEvent_t>(m_diagEvent), stream));
+                        cudaMemcpyDeviceToHost, diagStream);
+        CUDA_CHECK(cudaEventRecord(
+            static_cast<cudaEvent_t>(m_diagEvent), diagStream));
         m_diagPending = true;
     }
 

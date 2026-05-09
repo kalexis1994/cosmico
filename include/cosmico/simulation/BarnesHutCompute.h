@@ -28,6 +28,11 @@ struct BarnesHutStats {
     // Step / time bookkeeping (always valid)
     uint64_t stepCount = 0;
     double simTime = 0.0;
+
+    // Increments each time a new diagnostics sample is consumed by the
+    // CPU. UI uses this to push history points only when there's a new
+    // value, instead of duplicating the last sample every frame.
+    uint64_t diagSampleCount = 0;
 };
 
 class BarnesHutCompute {
@@ -62,11 +67,21 @@ private:
     void* m_startEvent = nullptr;      // cudaEvent_t for kernel timing
     void* m_stopEvent = nullptr;       // cudaEvent_t for kernel timing
 
-    // Diagnostics buffers + completion event for async readback.
+    // Diagnostics runs on its OWN cuda stream so the Vulkan render path
+    // (which syncs the simulation stream every frame) is never blocked
+    // by the PE tree-walk. Cross-stream dependencies via two events:
+    //   m_treeBuiltEvent — sim stream records it after each step;
+    //                      diag stream waits on it before walking the tree.
+    //   m_diagEvent      — diag stream records it after memcpy completes;
+    //                      CPU polls for the result, and the next sim step
+    //                      queues a wait on it before clearing the tree
+    //                      (so we never overwrite a tree being walked).
+    void* m_diagStream = nullptr;      // cudaStream_t (separate from sim)
     void* m_diagAccumDev = nullptr;    // cuda::DiagnosticsAccum (device)
     void* m_diagAccumHost = nullptr;   // cuda::DiagnosticsAccum (pinned host)
-    void* m_diagEvent = nullptr;       // cudaEvent_t recorded after memcpy
-    bool m_diagPending = false;        // a readback is in flight
+    void* m_diagEvent = nullptr;       // cudaEvent_t — diag complete
+    void* m_treeBuiltEvent = nullptr;  // cudaEvent_t — sim step done
+    bool m_diagPending = false;        // diag launched, not yet consumed
     bool m_baselineCaptured = false;   // initialEnergy populated yet
 
     // Run diagnostics every Nth step. The PE kernel walks the octree at
