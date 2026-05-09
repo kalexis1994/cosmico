@@ -1,0 +1,22 @@
+{
+  "title": "Solar System",
+  "description": "Real-scale orbital dynamics of the Sun, the eight planets and ten major moons, plus a populated asteroid and Kuiper belt. Uses NASA mass and orbital data in astronomical units (1 AU = 1 unit, 1 year = 1 unit, GM_sun = 4π²). Direct N-body integration via Vulkan compute shaders.",
+  "backend": "BruteForce",
+  "initialCondition": "SolarSystem",
+  "availableConditions": ["SolarSystem"],
+  "params": {
+    "particleCount": 4096,
+    "dt": 0.001,
+    "G": 1.0,
+    "softening": 0.001
+  },
+  "camera": {
+    "distance": 35.0,
+    "pitch": 0.5,
+    "yaw": 0.0,
+    "target": [0.0, 0.0, 0.0],
+    "fov": 60.0,
+    "near": 0.01,
+    "far": 200.0
+  }
+}

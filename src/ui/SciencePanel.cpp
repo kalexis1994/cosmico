@@ -1187,30 +1187,20 @@ void SciencePanel::render(ComputeBackend backend) {
     m_reloadCounter++;
     bool doReload = (m_reloadCounter % 60 == 0);
 
-    Document* doc = nullptr;
-    std::string filename;
+    if (m_papersDir.empty()) return;
 
+    Document* doc = nullptr;
     switch (backend) {
         case ComputeBackend::BruteForce:
-        case ComputeBackend::BarnesHut:
-            doc = &m_nbody; filename = "nbody.tex"; break;
-        case ComputeBackend::PM:
-            doc = &m_pm; filename = "pm.tex"; break;
-        case ComputeBackend::Inflation:
-            doc = &m_inflation; filename = "inflation.tex"; break;
-        case ComputeBackend::CDT2D:
-            doc = &m_cdt2d; filename = "cdt2d.tex"; break;
-        case ComputeBackend::CDT3D:
-            doc = &m_cdt3d; filename = "cdt3d.tex"; break;
-        default:
-            return;
+        case ComputeBackend::BarnesHut: doc = &m_nbody; break;
+        case ComputeBackend::PM:        doc = &m_pm; break;
+        case ComputeBackend::Inflation: doc = &m_inflation; break;
+        case ComputeBackend::CDT2D:     doc = &m_cdt2d; break;
+        case ComputeBackend::CDT3D:     doc = &m_cdt3d; break;
+        default: return;
     }
 
-    // Try per-simulation papers/index.tex first, fall back to legacy naming
     std::string path = m_papersDir + "/index.tex";
-    if (!std::filesystem::exists(path)) {
-        path = m_papersDir + "/" + filename;
-    }
 
     if (doc->blocks.empty() || doReload) {
         loadDocument(*doc, path);

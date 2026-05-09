@@ -70,7 +70,6 @@ cosmico/
 ├── cuda/kernels/     CUDA kernels (.cu/.cuh)
 ├── shaders/          GLSL sources (compiled to SPIR-V at build)
 ├── simulations/      Per-simulation configs, previews, papers
-├── papers/           Legacy LaTeX sources
 └── resources/        Planet textures and other static assets
 ```
 

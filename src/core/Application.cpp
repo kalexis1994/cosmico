@@ -195,14 +195,10 @@ void Application::initSimulation(int catalogIndex, InitialCondition icOverride) 
     // Debug UI
     m_debugUI = std::make_unique<DebugUI>();
 
-    // Science panel — use per-simulation papers if available, fall back to global
+    // Science panel — each simulation owns its own papers/ folder
     m_sciencePanel = std::make_unique<SciencePanel>();
-    std::string papersDir;
-    if (!entry.papersDir.empty() && std::filesystem::exists(entry.papersDir)) {
-        papersDir = entry.papersDir;
-    } else {
-        papersDir = resolvePathNextToExe("papers", COSMICO_PAPERS_DIR);
-    }
+    std::string papersDir = (!entry.papersDir.empty() && std::filesystem::exists(entry.papersDir))
+        ? entry.papersDir : std::string();
     m_sciencePanel->init(m_imguiBackend->fontBody,
                          m_imguiBackend->fontHeading,
                          m_imguiBackend->fontFormula,

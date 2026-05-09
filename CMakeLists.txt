@@ -160,7 +160,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE              # Vulkan depth range
     COSMICO_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/shaders"
-    COSMICO_PAPERS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/papers"
     COSMICO_SIMULATIONS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/simulations"
     COSMICO_RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
     _ALLOW_COMPILER_AND_STL_VERSION_MISMATCH # CUDA 12.1 + MSVC 14.44 compat
@@ -216,14 +215,6 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "${CMAKE_CURRENT_BINARY_DIR}/shaders"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders"
     COMMENT "Copying shaders/"
-)
-
-# Papers (LaTeX source for science panel — legacy, kept for compatibility)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/papers"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/papers"
-    COMMENT "Copying papers/"
 )
 
 # Simulations (gallery configs, preview images, per-simulation papers)
