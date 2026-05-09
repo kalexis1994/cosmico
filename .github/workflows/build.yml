@@ -30,10 +30,10 @@ jobs:
           # CMakeLists.txt includes them from ${VULKAN_SDK}/Include/{Volk,vma,glm}.
           optional_components: com.lunarg.vulkan.volk,com.lunarg.vulkan.vma,com.lunarg.vulkan.glm
           install_runtime: true
-          # Cache key is derived from vulkan_version only — adding optional
-          # components does not invalidate a stale cache. Leave off until a
-          # known-good install is confirmed, then re-enable.
-          cache: false
+          # Cache key is derived from vulkan_version alone. If you change
+          # optional_components in the future, bump vulkan_version (or
+          # temporarily set cache: false for one run) to bust the stale cache.
+          cache: true
           stripdown: true
 
       - name: Install CUDA Toolkit
