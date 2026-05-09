@@ -1,4 +1,5 @@
 #include <cosmico/core/Application.h>
+#include <cosmico/core/PathUtils.h>
 #include <cosmico/core/Window.h>
 #include <cosmico/core/Input.h>
 #include <cosmico/core/Timer.h>
@@ -53,8 +54,10 @@ namespace cosmico {
 
 // Resolve a path relative to the executable directory.
 // Falls back to the compile-time path if the relative one doesn't exist.
-static std::string resolvePathNextToExe(const std::string& relativePath,
-                                         [[maybe_unused]] const std::string& fallback) {
+// Declared in <cosmico/core/PathUtils.h>; defined here so windows.h /
+// unistd.h stay out of the public header.
+std::string resolvePathNextToExe(const std::string& relativePath,
+                                  [[maybe_unused]] const std::string& fallback) {
     std::filesystem::path exeDir;
 #ifdef _WIN32
     char buf[MAX_PATH];
@@ -123,160 +126,7 @@ void Application::init() {
     fprintf(stderr, "[Cosmico] Initialization complete (Gallery mode)\n");
 }
 
-// ─── Simulation lifecycle ───────────────────────────────────────────
-
-void Application::initSimulation(int catalogIndex, InitialCondition icOverride) {
-    const auto& entry = m_catalog->entry(catalogIndex);
-
-    // Determine the actual IC (caller may override for scenarios)
-    InitialCondition actualIC = (icOverride != InitialCondition::Count)
-        ? icOverride : entry.initialCondition;
-
-    // Simulation
-    m_simulation = std::make_unique<Simulation>();
-    m_simulation->init(*m_context, m_shaderDir);
-
-    // Apply params from config.json
-    m_simulation->params() = entry.defaultParams;
-
-    // Set backend
-    m_simulation->setBackend(*m_context, entry.backend);
-
-    // Camera: apply per-simulation config
-    {
-        const auto& cc = entry.cameraConfig;
-        m_camera->reset(cc.distance, cc.pitch, cc.yaw,
-                        glm::vec3(cc.target[0], cc.target[1], cc.target[2]),
-                        cc.fov, cc.nearPlane, cc.farPlane);
-        if (entry.backend == ComputeBackend::CDT2D)
-            m_camera->orthographic = true;
-    }
-
-    // Planet textures (solar system only)
-    if (actualIC == InitialCondition::SolarSystem) {
-        std::string texDir = resolvePathNextToExe("resources/planet-textures",
-            std::string(COSMICO_RESOURCES_DIR) + "/planet-textures");
-        m_planetTextures = std::make_unique<PlanetTextures>();
-        if (!m_planetTextures->init(*m_context, texDir)) {
-            fprintf(stderr, "[Cosmico] Planet textures failed to load, falling back to flat colors\n");
-            m_planetTextures.reset();
-        }
-    }
-
-    // Particle renderer (graphics pipeline)
-    bool usesParticles = (entry.backend != ComputeBackend::Inflation &&
-                          entry.backend != ComputeBackend::CDT2D &&
-                          entry.backend != ComputeBackend::CDT3D);
-    if (usesParticles) {
-        m_particleRenderer = std::make_unique<ParticleRenderer>();
-        VkDescriptorSetLayout texLayout = m_planetTextures
-            ? m_planetTextures->descriptorSetLayout() : VK_NULL_HANDLE;
-        m_particleRenderer->init(*m_context, m_offscreenTarget->renderPass(),
-                                  m_simulation->particleSystem().graphicsSetLayout(),
-                                  m_shaderDir, texLayout);
-    }
-
-    // Volume renderer (3D density visualization for inflation)
-    m_volumeRenderer = std::make_unique<VolumeRenderer>();
-    m_volumeRenderer->init(*m_context, m_offscreenTarget->renderPass(), m_shaderDir);
-
-    // CMB renderer (spherical last scattering surface)
-    m_cmbRenderer = std::make_unique<CMBRenderer>();
-    m_cmbRenderer->init(*m_context, m_offscreenTarget->renderPass(), m_shaderDir);
-
-    // CDT 2D renderer
-    m_cdt2dRenderer = std::make_unique<CDT2DRenderer>();
-    m_cdt2dRenderer->init(*m_context, m_offscreenTarget->renderPass(), m_shaderDir);
-
-    // CDT 3D renderer
-    m_cdt3dRenderer = std::make_unique<CDT3DRenderer>();
-    m_cdt3dRenderer->init(*m_context, m_offscreenTarget->renderPass(), m_shaderDir);
-
-    // Debug UI
-    m_debugUI = std::make_unique<DebugUI>();
-
-    // Science panel — each simulation owns its own papers/ folder
-    m_sciencePanel = std::make_unique<SciencePanel>();
-    std::string papersDir = (!entry.papersDir.empty() && std::filesystem::exists(entry.papersDir))
-        ? entry.papersDir : std::string();
-    m_sciencePanel->init(m_imguiBackend->fontBody,
-                         m_imguiBackend->fontHeading,
-                         m_imguiBackend->fontFormula,
-                         m_imguiBackend->fontBodyZoom,
-                         m_imguiBackend->fontHeadingZoom,
-                         m_imguiBackend->fontFormulaZoom,
-                         papersDir);
-
-    // Recording / playback
-    m_recorder = std::make_unique<SnapshotRecorder>();
-    m_player = std::make_unique<SnapshotPlayer>();
-    m_timelineUI = std::make_unique<TimelineUI>();
-    m_timelineState = {};
-    m_simStepCounter = 0;
-    m_simTime = 0.0;
-    m_playbackMode = false;
-
-    m_pendingIC = actualIC;
-
-    m_paused = true;
-    m_accumulator = 0.0f;
-    m_pendingBackendChange = false;
-    m_pendingReset = false;
-    m_backToGalleryRequested = false;
-
-    fprintf(stderr, "[Cosmico] Launched simulation: %s (%s)\n",
-            entry.title.c_str(), entry.backendStr.c_str());
-}
-
-void Application::cleanupSimulation() {
-    if (!m_simulation) return;
-
-    // Stop recording/playback before GPU teardown
-    if (m_recorder && m_recorder->isRecording()) m_recorder->stop();
-    if (m_player && m_player->isOpen()) m_player->close();
-    m_recorder.reset();
-    m_player.reset();
-    m_timelineUI.reset();
-    m_playbackMode = false;
-
-    vkDeviceWaitIdle(m_context->device());
-
-    m_debugUI.reset();
-    m_sciencePanel.reset();
-
-    if (m_cdt3dRenderer) {
-        m_cdt3dRenderer->destroy(m_context->device(), m_context->allocator());
-        m_cdt3dRenderer.reset();
-    }
-    if (m_cdt2dRenderer) {
-        m_cdt2dRenderer->destroy(m_context->device(), m_context->allocator());
-        m_cdt2dRenderer.reset();
-    }
-    if (m_cmbRenderer) {
-        m_cmbRenderer->destroy(m_context->device(), m_context->allocator());
-        m_cmbRenderer.reset();
-    }
-    if (m_volumeRenderer) {
-        m_volumeRenderer->destroy(m_context->device(), m_context->allocator());
-        m_volumeRenderer.reset();
-    }
-    if (m_planetTextures) {
-        m_planetTextures->destroy(m_context->device(), m_context->allocator());
-        m_planetTextures.reset();
-    }
-    if (m_particleRenderer) {
-        m_particleRenderer->destroy(m_context->device());
-        m_particleRenderer.reset();
-    }
-    if (m_simulation) {
-        m_simulation->destroy(*m_context);
-        m_simulation.reset();
-    }
-
-    m_camera->orthographic = false;
-
-    fprintf(stderr, "[Cosmico] Returned to gallery\n");
-}
+// initSimulation() and cleanupSimulation() live in AppSimLifecycle.cpp.
 
 // ─── Main loop ──────────────────────────────────────────────────────
 
@@ -926,147 +776,7 @@ void Application::renderDetailState() {
     }
 }
 
-// ─── Running state (3D rendering only — ImGui handled separately) ──
-
-void Application::renderRunningState(VkCommandBuffer cmd) {
-    if (!m_simulation) return;
-
-    bool usingInflation = (m_simulation->backend() == ComputeBackend::Inflation);
-    bool usingCDT2D = (m_simulation->backend() == ComputeBackend::CDT2D);
-    bool usingCDT3D = (m_simulation->backend() == ComputeBackend::CDT3D);
-    bool zeldovichMode = usingInflation && m_simulation->zeldovichActive();
-
-    // Compute camera matrices using actual offscreen render target size
-    float aspect = static_cast<float>(m_offscreenTarget->extent().width) /
-                   static_cast<float>(m_offscreenTarget->extent().height);
-    glm::mat4 view = m_camera->viewMatrix();
-    glm::mat4 proj = m_camera->projectionMatrix(aspect);
-    glm::mat4 viewProj = proj * view;
-    glm::mat4 invViewProj = glm::inverse(viewProj);
-    glm::vec3 camPos = m_camera->position();
-
-    float visualScale = 1.0f;
-    if (usingInflation && !zeldovichMode) {
-        const InflationStateData* infState = m_simulation->inflationState();
-        float scaleFactor = infState ? (float)infState->scaleFactor : 1.0f;
-        visualScale = std::pow(scaleFactor, 1.0f / 3.0f);
-        float maxVisualScale = m_camera->farPlane * 0.3f /
-                               (m_simulation->inflationParams().boxSize * 0.5f);
-        if (visualScale > maxVisualScale) visualScale = maxVisualScale;
-    }
-
-    float boxHalf = m_simulation->inflationParams().boxSize * 0.5f * visualScale;
-
-    // Volume rendering
-    bool volumeReady = usingInflation && m_simulation->inflationParams().showVolume;
-    if (volumeReady && m_volumeRenderer && m_volumeRenderer->isReady()) {
-        VolumeRenderPushConstants vpc{};
-        memcpy(vpc.invViewProj, glm::value_ptr(invViewProj), sizeof(float) * 16);
-        vpc.cameraPos[0] = camPos.x;
-        vpc.cameraPos[1] = camPos.y;
-        vpc.cameraPos[2] = camPos.z;
-        vpc.cameraPos[3] = 0.0f;
-        vpc.volumeMin[0] = -boxHalf;
-        vpc.volumeMin[1] = -boxHalf;
-        vpc.volumeMin[2] = -boxHalf;
-        vpc.volumeMin[3] = 0.0f;
-        vpc.volumeMax[0] = boxHalf;
-        vpc.volumeMax[1] = boxHalf;
-        vpc.volumeMax[2] = boxHalf;
-        vpc.volumeMax[3] = 0.0f;
-        vpc.opacityScale = m_simulation->inflationParams().volumeOpacity /
-                           (visualScale * visualScale);
-        int numSteps = m_simulation->inflationParams().volumeSteps;
-        float totalDist = boxHalf * 2.0f * 1.732f;
-        vpc.stepSize = totalDist / (float)numSteps;
-        vpc.numSteps = numSteps;
-        vpc.padding = 0.0f;
-        m_volumeRenderer->draw(cmd, vpc);
-    }
-
-    // CMB sphere
-    bool cmbReady = usingInflation && !zeldovichMode && m_simulation->inflationParams().showCMB;
-    if (cmbReady && m_cmbRenderer && m_cmbRenderer->isReady()) {
-        const auto& iparams = m_simulation->inflationParams();
-        float sphereRadius = iparams.cmbRadius * iparams.boxSize * visualScale;
-        CMBRenderPushConstants cpc{};
-        memcpy(cpc.invViewProj, glm::value_ptr(invViewProj), sizeof(float) * 16);
-        cpc.cameraPos[0] = camPos.x;
-        cpc.cameraPos[1] = camPos.y;
-        cpc.cameraPos[2] = camPos.z;
-        cpc.cameraPos[3] = 0.0f;
-        cpc.sphereCenter[0] = 0.0f;
-        cpc.sphereCenter[1] = 0.0f;
-        cpc.sphereCenter[2] = 0.0f;
-        cpc.sphereCenter[3] = sphereRadius;
-        cpc.contrastScale = iparams.cmbContrast;
-        cpc.opacity = iparams.cmbOpacity;
-        cpc.padding[0] = 0.0f;
-        cpc.padding[1] = 0.0f;
-        m_cmbRenderer->draw(cmd, cpc);
-    }
-
-    // CDT2D mesh
-    if (usingCDT2D) {
-        const CDT2DStateData* cdtState = m_simulation->cdt2dState();
-        if (cdtState && !cdtState->vertexData.empty()) {
-            m_cdt2dRenderer->updateMesh(cdtState->vertexData.data(), cdtState->triangleCount);
-            CDT2DRenderPushConstants cpc{};
-            memcpy(cpc.viewProj, glm::value_ptr(viewProj), sizeof(float) * 16);
-            cpc.meshScale = m_simulation->cdt2dParams().meshScale;
-            cpc.showWireframe = m_simulation->cdt2dParams().showWireframe ? 1 : 0;
-            m_cdt2dRenderer->draw(cmd, cpc);
-        }
-    }
-
-    // CDT3D mesh
-    if (usingCDT3D) {
-        const CDT3DStateData* cdt3dState = m_simulation->cdt3dState();
-        if (cdt3dState && !cdt3dState->vertexData.empty()) {
-            m_cdt3dRenderer->updateMesh(cdt3dState->vertexData.data(), cdt3dState->triangleCount);
-            CDT3DRenderPushConstants cpc{};
-            memcpy(cpc.viewProj, glm::value_ptr(viewProj), sizeof(float) * 16);
-            cpc.lightDir[0] = 0.577f;
-            cpc.lightDir[1] = 0.577f;
-            cpc.lightDir[2] = 0.577f;
-            cpc.lightDir[3] = m_simulation->cdt3dParams().lightIntensity;
-            cpc.meshScale = m_simulation->cdt3dParams().meshScale;
-            cpc.showWireframe = m_simulation->cdt3dParams().showWireframe ? 1 : 0;
-            m_cdt3dRenderer->draw(cmd, cpc);
-        }
-    }
-
-    // Particles
-    if (!usingInflation && !usingCDT2D && !usingCDT3D && m_particleRenderer) {
-        ParticleRenderPushConstants pc{};
-        memcpy(pc.viewProj, glm::value_ptr(viewProj), sizeof(float) * 16);
-        pc.pointScale = static_cast<float>(m_offscreenTarget->extent().height) / 2.0f;
-        pc.hasPlanetTextures = m_planetTextures ? 1.0f : 0.0f;
-        pc.tanHalfFov = std::tan(glm::radians(m_camera->fovDegrees) * 0.5f);
-        pc.aspectRatio = static_cast<float>(m_offscreenTarget->extent().width)
-                       / static_cast<float>(m_offscreenTarget->extent().height);
-
-        // Camera basis vectors for world-space normal reconstruction
-        glm::vec3 fwd = m_camera->forward();
-        glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3(0.0f, 1.0f, 0.0f)));
-        glm::vec3 up = glm::cross(right, fwd);
-        pc.camRight[0] = right.x; pc.camRight[1] = right.y;
-        pc.camRight[2] = right.z; pc.camRight[3] = camPos.x;
-        pc.camUp[0] = up.x; pc.camUp[1] = up.y;
-        pc.camUp[2] = up.z; pc.camUp[3] = camPos.y;
-        pc.camForward[0] = fwd.x; pc.camForward[1] = fwd.y;
-        pc.camForward[2] = fwd.z; pc.camForward[3] = camPos.z;
-        pc.simTime = static_cast<float>(m_simTime);
-        pc.showDarkMatter = m_simulation->params().showDarkMatter ? 1.0f : 0.0f;
-
-        VkDescriptorSet texSet = m_planetTextures
-            ? m_planetTextures->descriptorSet() : VK_NULL_HANDLE;
-        m_particleRenderer->draw(cmd,
-            m_simulation->particleSystem().graphicsDescriptorSet(),
-            m_simulation->particleSystem().particleCount(),
-            pc, texSet, sphereBodyCount(m_pendingIC));
-    }
-}
+// renderRunningState() lives in AppSceneRender.cpp.
 
 // ─── Cleanup ────────────────────────────────────────────────────────
 
