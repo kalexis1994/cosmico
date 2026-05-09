@@ -93,30 +93,27 @@ set(JSON_Install OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(nlohmann_json)
 
 # ─── stb (stb_image for preview texture loading) ────────────────────
+# Header-only with no CMakeLists.txt — MakeAvailable just populates.
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG        master
     GIT_SHALLOW    TRUE
 )
-FetchContent_GetProperties(stb)
-if(NOT stb_POPULATED)
-    FetchContent_Populate(stb)
-endif()
+FetchContent_MakeAvailable(stb)
 
 # ─── imnodes (node editor extension for ImGui) ───────────────────────
-# Only populate (download), do NOT run imnodes' own CMakeLists.txt
-# which tries find_package(imgui) and fails.
+# Its CMakeLists.txt calls find_package(imgui) which we don't satisfy —
+# point SOURCE_SUBDIR at a path that does not exist so MakeAvailable
+# populates without running add_subdirectory.
 FetchContent_Declare(
     imnodes
     GIT_REPOSITORY https://github.com/Nelarius/imnodes.git
     GIT_TAG        master
     GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  _do_not_configure_
 )
-FetchContent_GetProperties(imnodes)
-if(NOT imnodes_POPULATED)
-    FetchContent_Populate(imnodes)
-endif()
+FetchContent_MakeAvailable(imnodes)
 
 add_library(imnodes_lib STATIC
     ${imnodes_SOURCE_DIR}/imnodes.cpp

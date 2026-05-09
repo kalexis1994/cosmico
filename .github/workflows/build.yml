@@ -35,7 +35,9 @@ jobs:
         with:
           cuda: '12.1.1'
           method: network
-          sub-packages: '["nvcc", "cudart", "cufft", "curand", "thrust", "visual_studio_integration"]'
+          # *_dev sub-packages ship the .lib + headers needed for
+          # find_package(CUDAToolkit) to create the IMPORTED targets.
+          sub-packages: '["nvcc", "cudart", "cufft", "cufft_dev", "curand", "curand_dev", "thrust", "visual_studio_integration"]'
           use-github-cache: true
 
       - name: Configure
