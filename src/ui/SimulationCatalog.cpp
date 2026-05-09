@@ -19,6 +19,40 @@
 
 namespace cosmico {
 
+namespace {
+
+// Truncate a string with an ellipsis so it fits within maxWidth at the
+// given font size. Returns the original string if it already fits.
+// Falls back to an empty string if even "..." doesn't fit.
+std::string fitTextWithEllipsis(const std::string& text, float maxWidth, float fontSize) {
+    ImFont* font = ImGui::GetFont();
+    if (!font || text.empty()) return text;
+
+    auto measure = [&](const char* begin, const char* end) {
+        return font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, begin, end).x;
+    };
+
+    if (measure(text.c_str(), text.c_str() + text.size()) <= maxWidth) {
+        return text;
+    }
+
+    static const char* ellipsis = "...";
+    float ellipsisW = measure(ellipsis, ellipsis + 3);
+    if (ellipsisW > maxWidth) return std::string();
+
+    // Binary search for the longest prefix that fits with ellipsis appended.
+    int lo = 0, hi = static_cast<int>(text.size());
+    while (lo < hi) {
+        int mid = (lo + hi + 1) / 2;
+        float w = measure(text.c_str(), text.c_str() + mid);
+        if (w + ellipsisW <= maxWidth) lo = mid;
+        else hi = mid - 1;
+    }
+    return text.substr(0, lo) + ellipsis;
+}
+
+} // namespace
+
 // ─── Backend string mapping ─────────────────────────────────────────
 
 ComputeBackend SimulationCatalog::computeBackendFromString(const std::string& s) {
@@ -427,11 +461,25 @@ bool SimulationCatalog::renderGallery(int& selectedIndex) {
         // Card grid
         float avail = ImGui::GetContentRegionAvail().x;
         constexpr float cardW = 260.0f;
+        constexpr float cardH = 300.0f;
         constexpr float cardSpacing = 16.0f;
+        constexpr float cardPadX = 14.0f;       // inner horizontal padding
+        constexpr float imgW = cardW - 20.0f;
+        constexpr float imgH = 160.0f;
+        constexpr float titleSize = 16.0f;
+        constexpr float descSize = 13.0f;
+        constexpr float badgeReserve = 36.0f;   // bottom strip reserved for badge
         int cols = std::max(1, static_cast<int>((avail + cardSpacing) / (cardW + cardSpacing)));
 
+        // Center the grid horizontally within the available area.
+        float gridWidth = cols * cardW + (cols - 1) * cardSpacing;
+        float rowLeftPad = std::max(0.0f, (avail - gridWidth) * 0.5f);
+        float rowStartX = ImGui::GetCursorPosX();
+
         for (int i = 0; i < static_cast<int>(m_entries.size()); i++) {
-            if (i % cols != 0) {
+            if (i % cols == 0) {
+                ImGui::SetCursorPosX(rowStartX + rowLeftPad);
+            } else {
                 ImGui::SameLine(0.0f, cardSpacing);
             }
 
@@ -442,7 +490,8 @@ bool SimulationCatalog::renderGallery(int& selectedIndex) {
 
             // Card background
             ImVec2 cardStart = ImGui::GetCursorScreenPos();
-            ImVec2 cardSize(cardW, 300.0f);
+            ImVec2 cardSize(cardW, cardH);
+            ImVec2 cardEnd(cardStart.x + cardW, cardStart.y + cardH);
 
             // Invisible button for click detection over the whole card
             if (ImGui::InvisibleButton("##card", cardSize)) {
@@ -456,28 +505,25 @@ bool SimulationCatalog::renderGallery(int& selectedIndex) {
             ImDrawList* dl = ImGui::GetWindowDrawList();
             ImU32 bgColor = hovered ? IM_COL32(40, 40, 70, 230) : IM_COL32(25, 25, 45, 200);
             ImU32 borderColor = hovered ? IM_COL32(100, 130, 255, 200) : IM_COL32(60, 60, 100, 150);
-            dl->AddRectFilled(cardStart,
-                              ImVec2(cardStart.x + cardW, cardStart.y + cardSize.y),
-                              bgColor, 8.0f);
-            dl->AddRect(cardStart,
-                        ImVec2(cardStart.x + cardW, cardStart.y + cardSize.y),
-                        borderColor, 8.0f, 0, hovered ? 2.0f : 1.0f);
+            dl->AddRectFilled(cardStart, cardEnd, bgColor, 8.0f);
+            dl->AddRect(cardStart, cardEnd, borderColor, 8.0f, 0, hovered ? 2.0f : 1.0f);
+
+            // Hard clip: nothing drawn after this can escape the card bounds.
+            dl->PushClipRect(cardStart, cardEnd, true);
 
             // Preview image
-            float imgW = cardW - 20.0f;
-            float imgH = 160.0f;
             ImVec2 imgPos(cardStart.x + 10.0f, cardStart.y + 10.0f);
+            ImVec2 imgEnd(imgPos.x + imgW, imgPos.y + imgH);
 
             if (e.loaded && e.previewTexture) {
                 dl->AddImage(reinterpret_cast<ImTextureID>(e.previewTexture),
-                             imgPos, ImVec2(imgPos.x + imgW, imgPos.y + imgH),
+                             imgPos, imgEnd,
                              ImVec2(0, 0), ImVec2(1, 1));
             } else {
                 // Placeholder gradient
                 ImU32 gradTop = IM_COL32(40, 60, 100, 255);
                 ImU32 gradBot = IM_COL32(20, 30, 50, 255);
-                dl->AddRectFilledMultiColor(imgPos,
-                    ImVec2(imgPos.x + imgW, imgPos.y + imgH),
+                dl->AddRectFilledMultiColor(imgPos, imgEnd,
                     gradTop, gradTop, gradBot, gradBot);
                 // Centered text
                 const char* noPreview = "No Preview";
@@ -487,38 +533,41 @@ bool SimulationCatalog::renderGallery(int& selectedIndex) {
                             IM_COL32(120, 120, 150, 200), noPreview);
             }
 
-            // Title
+            // Title — single line with ellipsis if it would overflow.
+            float textX = cardStart.x + cardPadX;
             float textY = cardStart.y + imgH + 20.0f;
-            float textX = cardStart.x + 14.0f;
-            dl->AddText(nullptr, 16.0f,
+            float textWidth = cardW - 2.0f * cardPadX;
+            std::string fittedTitle = fitTextWithEllipsis(e.title, textWidth, titleSize);
+            dl->AddText(nullptr, titleSize,
                         ImVec2(textX, textY),
                         IM_COL32(220, 220, 240, 255),
-                        e.title.c_str());
+                        fittedTitle.c_str());
 
-            // Description snippet (2 lines max)
+            // Description — wraps within textWidth and is clipped vertically
+            // before the badge area, so long copy can never collide.
             float descY = textY + 24.0f;
-            std::string snippet = e.description;
-            if (snippet.size() > 100) {
-                snippet = snippet.substr(0, 97) + "...";
-            }
-            // Use AddText with wrapping by clipping
-            dl->AddText(nullptr, 13.0f,
+            float descMaxY = cardEnd.y - badgeReserve;
+            ImVec4 descClip(textX, descY, textX + textWidth, descMaxY);
+            dl->AddText(nullptr, descSize,
                         ImVec2(textX, descY),
                         IM_COL32(160, 160, 180, 200),
-                        snippet.c_str(),
-                        snippet.c_str() + std::min(snippet.size(), size_t(120)));
+                        e.description.c_str(),
+                        nullptr,    // text_end NULL -> render until '\0'
+                        textWidth,  // wrap_width
+                        &descClip);
 
             // Backend badge
-            float badgeY = cardStart.y + cardSize.y - 28.0f;
+            float badgeY = cardEnd.y - 28.0f;
             const char* backendLabel = computeBackendName(e.backend);
             ImVec2 badgeSize = ImGui::CalcTextSize(backendLabel);
-            float badgeX = cardStart.x + cardW - badgeSize.x - 18.0f;
+            float badgeX = cardEnd.x - badgeSize.x - 18.0f;
             dl->AddRectFilled(ImVec2(badgeX - 4.0f, badgeY - 2.0f),
                               ImVec2(badgeX + badgeSize.x + 4.0f, badgeY + badgeSize.y + 2.0f),
                               IM_COL32(50, 80, 130, 200), 4.0f);
             dl->AddText(ImVec2(badgeX, badgeY),
                         IM_COL32(140, 180, 255, 255), backendLabel);
 
+            dl->PopClipRect();
             ImGui::EndGroup();
             ImGui::PopID();
         }
@@ -672,13 +721,26 @@ void SimulationCatalog::renderScenarioGrid(const SimulationEntry& entry,
     constexpr float cardW = 260.0f;
     constexpr float cardH = 300.0f;
     constexpr float cardSpacing = 16.0f;
+    constexpr float cardPadX = 14.0f;
+    constexpr float imgW = cardW - 20.0f;
+    constexpr float imgH = 160.0f;
+    constexpr float titleSize = 16.0f;
+    constexpr float descSize = 13.0f;
+    constexpr float badgeReserve = 36.0f;
     int cols = std::max(1, static_cast<int>((avail + cardSpacing) / (cardW + cardSpacing)));
 
     // Total cards: 1 ("+ New Scenario") + saved scenarios
     int totalCards = 1 + static_cast<int>(entry.scenarios.size());
 
+    // Center the grid horizontally — match renderGallery layout.
+    float gridWidth = cols * cardW + (cols - 1) * cardSpacing;
+    float rowLeftPad = std::max(0.0f, (avail - gridWidth) * 0.5f);
+    float rowStartX = ImGui::GetCursorPosX();
+
     for (int i = 0; i < totalCards; i++) {
-        if (i % cols != 0) {
+        if (i % cols == 0) {
+            ImGui::SetCursorPosX(rowStartX + rowLeftPad);
+        } else {
             ImGui::SameLine(0.0f, cardSpacing);
         }
 
@@ -687,6 +749,7 @@ void SimulationCatalog::renderScenarioGrid(const SimulationEntry& entry,
 
         ImVec2 cardStart = ImGui::GetCursorScreenPos();
         ImVec2 cardSize(cardW, cardH);
+        ImVec2 cardEnd(cardStart.x + cardW, cardStart.y + cardH);
 
         if (ImGui::InvisibleButton("##scenarioCard", cardSize)) {
             selectedScenarioIndex = i - 1; // -1 = New Scenario, 0+ = saved
@@ -694,26 +757,29 @@ void SimulationCatalog::renderScenarioGrid(const SimulationEntry& entry,
         bool hovered = ImGui::IsItemHovered();
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        float imgW = cardW - 20.0f;
-        float imgH = 160.0f;
         ImVec2 imgPos(cardStart.x + 10.0f, cardStart.y + 10.0f);
+        ImVec2 imgEnd(imgPos.x + imgW, imgPos.y + imgH);
+
+        float textX = cardStart.x + cardPadX;
+        float textY = cardStart.y + imgH + 20.0f;
+        float textWidth = cardW - 2.0f * cardPadX;
+        float descY = textY + 24.0f;
+        float descMaxY = cardEnd.y - badgeReserve;
+        ImVec4 descClip(textX, descY, textX + textWidth, descMaxY);
 
         if (i == 0) {
             // ── "+ New Scenario" card ──
             ImU32 bgColor = hovered ? IM_COL32(30, 55, 35, 230) : IM_COL32(20, 40, 25, 200);
             ImU32 borderColor = hovered ? IM_COL32(80, 200, 100, 200) : IM_COL32(50, 130, 70, 150);
-            dl->AddRectFilled(cardStart,
-                              ImVec2(cardStart.x + cardW, cardStart.y + cardH),
-                              bgColor, 8.0f);
-            dl->AddRect(cardStart,
-                        ImVec2(cardStart.x + cardW, cardStart.y + cardH),
-                        borderColor, 8.0f, 0, hovered ? 2.0f : 1.0f);
+            dl->AddRectFilled(cardStart, cardEnd, bgColor, 8.0f);
+            dl->AddRect(cardStart, cardEnd, borderColor, 8.0f, 0, hovered ? 2.0f : 1.0f);
+
+            dl->PushClipRect(cardStart, cardEnd, true);
 
             // Dashed border effect in image area
             ImU32 gradTop = IM_COL32(30, 60, 35, 255);
             ImU32 gradBot = IM_COL32(15, 35, 20, 255);
-            dl->AddRectFilledMultiColor(imgPos,
-                ImVec2(imgPos.x + imgW, imgPos.y + imgH),
+            dl->AddRectFilledMultiColor(imgPos, imgEnd,
                 gradTop, gradTop, gradBot, gradBot);
 
             // Large "+" centered in image area
@@ -726,47 +792,46 @@ void SimulationCatalog::renderScenarioGrid(const SimulationEntry& entry,
                                imgPos.y + (imgH - scaledSize.y) * 0.5f),
                         IM_COL32(80, 200, 100, 220), plusSign);
 
-            // Title
-            float textY = cardStart.y + imgH + 20.0f;
-            float textX = cardStart.x + 14.0f;
-            dl->AddText(nullptr, 16.0f,
+            // Title (single line, ellipsis if needed)
+            std::string fittedTitle = fitTextWithEllipsis("New Scenario", textWidth, titleSize);
+            dl->AddText(nullptr, titleSize,
                         ImVec2(textX, textY),
                         IM_COL32(140, 230, 160, 255),
-                        "New Scenario");
+                        fittedTitle.c_str());
 
-            // Description: default IC
-            float descY = textY + 24.0f;
+            // Description: default IC (wraps + clipped)
             std::string defaultIC = entry.availableConditions.empty()
                 ? "default" : entry.availableConditions[0];
             std::string desc = "Launch with " + defaultIC + " initial conditions";
-            dl->AddText(nullptr, 13.0f,
+            dl->AddText(nullptr, descSize,
                         ImVec2(textX, descY),
                         IM_COL32(120, 180, 140, 200),
                         desc.c_str(),
-                        desc.c_str() + std::min(desc.size(), size_t(120)));
+                        nullptr,
+                        textWidth,
+                        &descClip);
+
+            dl->PopClipRect();
         } else {
             // ── Saved scenario card ──
             const auto& sc = entry.scenarios[i - 1];
 
             ImU32 bgColor = hovered ? IM_COL32(40, 40, 70, 230) : IM_COL32(25, 25, 45, 200);
             ImU32 borderColor = hovered ? IM_COL32(100, 130, 255, 200) : IM_COL32(60, 60, 100, 150);
-            dl->AddRectFilled(cardStart,
-                              ImVec2(cardStart.x + cardW, cardStart.y + cardH),
-                              bgColor, 8.0f);
-            dl->AddRect(cardStart,
-                        ImVec2(cardStart.x + cardW, cardStart.y + cardH),
-                        borderColor, 8.0f, 0, hovered ? 2.0f : 1.0f);
+            dl->AddRectFilled(cardStart, cardEnd, bgColor, 8.0f);
+            dl->AddRect(cardStart, cardEnd, borderColor, 8.0f, 0, hovered ? 2.0f : 1.0f);
+
+            dl->PushClipRect(cardStart, cardEnd, true);
 
             // Preview image or gradient fallback
             if (sc.loaded && sc.previewTexture) {
                 dl->AddImage(reinterpret_cast<ImTextureID>(sc.previewTexture),
-                             imgPos, ImVec2(imgPos.x + imgW, imgPos.y + imgH),
+                             imgPos, imgEnd,
                              ImVec2(0, 0), ImVec2(1, 1));
             } else {
                 ImU32 gradTop = IM_COL32(40, 60, 100, 255);
                 ImU32 gradBot = IM_COL32(20, 30, 50, 255);
-                dl->AddRectFilledMultiColor(imgPos,
-                    ImVec2(imgPos.x + imgW, imgPos.y + imgH),
+                dl->AddRectFilledMultiColor(imgPos, imgEnd,
                     gradTop, gradTop, gradBot, gradBot);
                 const char* noPreview = "No Preview";
                 ImVec2 textSize = ImGui::CalcTextSize(noPreview);
@@ -776,33 +841,33 @@ void SimulationCatalog::renderScenarioGrid(const SimulationEntry& entry,
             }
 
             // Title
-            float textY = cardStart.y + imgH + 20.0f;
-            float textX = cardStart.x + 14.0f;
-            dl->AddText(nullptr, 16.0f,
+            std::string fittedTitle = fitTextWithEllipsis(sc.title, textWidth, titleSize);
+            dl->AddText(nullptr, titleSize,
                         ImVec2(textX, textY),
                         IM_COL32(220, 220, 240, 255),
-                        sc.title.c_str());
+                        fittedTitle.c_str());
 
-            // Description snippet
-            float descY = textY + 24.0f;
-            std::string snippet = sc.description;
-            if (snippet.size() > 100) snippet = snippet.substr(0, 97) + "...";
-            dl->AddText(nullptr, 13.0f,
+            // Description (wraps + clipped)
+            dl->AddText(nullptr, descSize,
                         ImVec2(textX, descY),
                         IM_COL32(160, 160, 180, 200),
-                        snippet.c_str(),
-                        snippet.c_str() + std::min(snippet.size(), size_t(120)));
+                        sc.description.c_str(),
+                        nullptr,
+                        textWidth,
+                        &descClip);
 
             // IC badge (purple tint)
-            float badgeY = cardStart.y + cardH - 28.0f;
+            float badgeY = cardEnd.y - 28.0f;
             const char* icLabel = initialConditionName(sc.initialCondition);
             ImVec2 badgeSize = ImGui::CalcTextSize(icLabel);
-            float badgeX = cardStart.x + cardW - badgeSize.x - 18.0f;
+            float badgeX = cardEnd.x - badgeSize.x - 18.0f;
             dl->AddRectFilled(ImVec2(badgeX - 4.0f, badgeY - 2.0f),
                               ImVec2(badgeX + badgeSize.x + 4.0f, badgeY + badgeSize.y + 2.0f),
                               IM_COL32(80, 50, 130, 200), 4.0f);
             dl->AddText(ImVec2(badgeX, badgeY),
                         IM_COL32(180, 140, 255, 255), icLabel);
+
+            dl->PopClipRect();
         }
 
         ImGui::EndGroup();
