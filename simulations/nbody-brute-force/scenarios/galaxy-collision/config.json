@@ -1,0 +1,5 @@
+{
+  "title": "Galaxy Merger",
+  "description": "Two disk galaxies on a collision course. Watch tidal tails form as the galaxies interact and eventually merge into a single elliptical remnant.",
+  "initialCondition": "GalaxyCollision"
+}

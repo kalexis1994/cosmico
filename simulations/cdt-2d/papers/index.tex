@@ -1,0 +1,46 @@
+\section{Causal Dynamical Triangulations -- 2D}
+
+Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from fundamental simplicial building blocks while preserving a causal (Lorentzian) structure.
+
+\subsection{The Path Integral}
+
+The gravitational path integral is regularized by summing over causal triangulations $T$:
+
+\begin{equation}
+Z = \sum_{T} \frac{1}{C_T} e^{-S_{\text{Regge}}[T]}
+\end{equation}
+
+\begin{itemize}
+\item $C_T$ -- symmetry factor of triangulation $T$
+\item $S_{\text{Regge}}$ -- Regge action (discrete Einstein--Hilbert)
+\end{itemize}
+
+\subsection{Regge Action in 2D}
+
+In 1+1 dimensions the Regge action simplifies to:
+
+\begin{equation}
+S = \lambda N_2 - \mu N_0
+\end{equation}
+
+\begin{itemize}
+\item $\lambda$ -- cosmological constant coupling
+\item $N_2$ -- number of triangles
+\item $N_0$ -- number of vertices
+\end{itemize}
+
+\subsection{Monte Carlo Moves}
+
+The triangulation is updated via Pachner moves that preserve the causal structure:
+
+\begin{itemize}
+\item $(2,2)$ flip -- exchanges the diagonal of two adjacent triangles
+\item $(2,4)$ insertion -- splits a triangle by inserting a vertex
+\item $(4,2)$ removal -- removes a vertex and merges triangles
+\end{itemize}
+
+\subsection{Observables}
+
+\param{$d_H$}{Hausdorff dimension -- measures how volume scales with geodesic distance}
+\param{$d_s$}{Spectral dimension -- extracted from the return probability of a diffusion process}
+\param{$n(t)$}{Volume profile -- number of triangles per time slice}

@@ -1,0 +1,11 @@
+{
+  "title": "CDT 2D Quantum Gravity",
+  "description": "Causal Dynamical Triangulations in 1+1 dimensions. A Monte Carlo simulation of 2D quantum gravity using Pachner moves on a triangulated spacetime, measuring the emergent Hausdorff and spectral dimensions.",
+  "backend": "CDT2D",
+  "params": {
+    "timeSlices": 32,
+    "targetTriangles": 2000,
+    "lambda": 1.0,
+    "sweepsPerFrame": 10
+  }
+}

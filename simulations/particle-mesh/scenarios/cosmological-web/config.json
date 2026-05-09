@@ -1,0 +1,8 @@
+{
+  "title": "Cosmological Web",
+  "description": "Large-scale structure formation from cosmological initial conditions. Watch the cosmic web emerge as dark matter collapses into filaments and halos under gravitational instability.",
+  "initialCondition": "Cosmological",
+  "params": {
+    "particleCount": 262144
+  }
+}

@@ -1,0 +1,61 @@
+# ─── Build output ─────────────────────────────────────────────────
+build/
+build-*/
+out/
+cmake-build-*/
+install/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+_deps/
+*.cmake.in
+
+# ─── Compiled binaries / objects ──────────────────────────────────
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+
+# Compiled shaders (generated from shaders/*.vert/.frag/.comp)
+*.spv
+
+# ─── IDE / Editor ─────────────────────────────────────────────────
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln
+*.vcxproj*
+*.swp
+*~
+
+# ─── ImGui runtime state ──────────────────────────────────────────
+imgui.ini
+
+# ─── OS junk ──────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+._*
+
+# ─── Runtime artifacts ────────────────────────────────────────────
+recordings/
+*.cosmsnap
+*.log
+
+# ─── Local Claude config (per-user, not shared) ───────────────────
+.claude/settings.local.json

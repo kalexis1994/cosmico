@@ -1,0 +1,28 @@
+# Auto-normalize line endings on commit (LF in repo, native on checkout).
+* text=auto
+
+# Force LF for source files — keeps diffs clean across platforms.
+*.cpp        text eol=lf
+*.h          text eol=lf
+*.cu         text eol=lf
+*.cuh        text eol=lf
+*.vert       text eol=lf
+*.frag       text eol=lf
+*.comp       text eol=lf
+*.glsl       text eol=lf
+*.cmake      text eol=lf
+CMakeLists.txt text eol=lf
+*.md         text eol=lf
+*.json       text eol=lf
+*.tex        text eol=lf
+
+# Force CRLF for Windows-only files.
+*.bat        text eol=crlf
+*.cmd        text eol=crlf
+
+# Binary assets — never touch.
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.spv        binary
+*.cosmsnap   binary

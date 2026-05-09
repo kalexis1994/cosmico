@@ -1,0 +1,11 @@
+{
+  "title": "Cosmic Inflation",
+  "description": "Lattice simulation of cosmic inflation driven by a scalar inflaton field. Uses CUDA and cuFFT to evolve the field on a 3D grid, computing the power spectrum, CMB temperature anisotropies, and structure formation via the Zel'dovich approximation.",
+  "backend": "Inflation",
+  "params": {
+    "gridSize": 128,
+    "phi0": 3.0,
+    "dt": 0.001,
+    "stepsPerFrame": 10
+  }
+}

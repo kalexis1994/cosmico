@@ -1,0 +1,19 @@
+{
+  "title": "Particle-Mesh Gravity",
+  "description": "O(N + M log M) cosmological simulation using CUDA and cuFFT. Particles are deposited onto a grid via Cloud-in-Cell interpolation, the gravitational potential is solved in Fourier space, and forces are interpolated back to particles.",
+  "backend": "PM",
+  "initialCondition": "Cosmological",
+  "availableConditions": ["Cosmological", "Sphere", "Disk", "Galaxy"],
+  "params": {
+    "particleCount": 131072,
+    "dt": 0.005,
+    "G": 1.0,
+    "gridSize": 128,
+    "boxSize": 100.0
+  },
+  "camera": {
+    "distance": 150.0,
+    "pitch": 0.4,
+    "yaw": 0.3
+  }
+}

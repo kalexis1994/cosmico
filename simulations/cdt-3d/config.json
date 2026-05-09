@@ -1,0 +1,12 @@
+{
+  "title": "CDT 3D Quantum Gravity",
+  "description": "Causal Dynamical Triangulations in 2+1 dimensions. A CUDA-accelerated Monte Carlo simulation of 3D quantum gravity using (2,6), (4,4), and (2,3) Pachner moves on a simplicial complex, probing the phase diagram of quantum spacetime.",
+  "backend": "CDT3D",
+  "params": {
+    "timeSlices": 16,
+    "targetTetrahedra": 10000,
+    "k0": 1.0,
+    "k3": 1.0,
+    "sweepsPerFrame": 5
+  }
+}

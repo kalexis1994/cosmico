@@ -1,0 +1,19 @@
+{
+  "title": "PM Node Graph",
+  "description": "Visual node-based pipeline builder for the Particle-Mesh algorithm. Decompose the PM gravity solver into composable nodes — density deposition, FFT, Green's function, force interpolation — and rewire the pipeline interactively.",
+  "backend": "NodeGraph",
+  "initialCondition": "Cosmological",
+  "availableConditions": ["Cosmological", "Sphere", "Disk"],
+  "params": {
+    "particleCount": 131072,
+    "dt": 0.005,
+    "G": 1.0,
+    "gridSize": 128,
+    "boxSize": 100.0
+  },
+  "camera": {
+    "distance": 150.0,
+    "pitch": 0.4,
+    "yaw": 0.3
+  }
+}

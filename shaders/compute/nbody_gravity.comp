@@ -1,0 +1,75 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+struct Particle {
+    vec4 position;    // xyz = position, w = mass
+    vec4 velocity;    // xyz = velocity, w = temperature
+    vec4 attributes;  // x = density, y = pressure, z = smoothing_length, w = type
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer ParticlesIn {
+    Particle particlesIn[];
+};
+
+layout(std430, set = 0, binding = 1) writeonly buffer ParticlesOut {
+    Particle particlesOut[];
+};
+
+layout(std140, set = 1, binding = 0) uniform SimParams {
+    float G;
+    float dt;
+    float softening;
+    int particleCount;
+};
+
+shared vec4 sharedPos[256]; // xyz = position, w = mass
+
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    if (gid >= uint(particleCount)) return;
+
+    Particle p = particlesIn[gid];
+    vec3 pos = p.position.xyz;
+    float mass = p.position.w;
+    vec3 vel = p.velocity.xyz;
+
+    // Kick-Drift-Kick (Leapfrog/Velocity Verlet)
+    // Step 1: Compute acceleration at current position
+    vec3 accel = vec3(0.0);
+    float eps2 = softening * softening;
+
+    uint tileCount = (uint(particleCount) + 255u) / 256u;
+
+    for (uint tile = 0; tile < tileCount; tile++) {
+        uint tileIdx = tile * 256u + gl_LocalInvocationID.x;
+        if (tileIdx < uint(particleCount)) {
+            sharedPos[gl_LocalInvocationID.x] = particlesIn[tileIdx].position;
+        } else {
+            sharedPos[gl_LocalInvocationID.x] = vec4(0.0);
+        }
+        barrier();
+
+        for (uint j = 0; j < 256u; j++) {
+            uint idx = tile * 256u + j;
+            if (idx >= uint(particleCount) || idx == gid) continue;
+
+            vec3 r = sharedPos[j].xyz - pos;
+            float distSq = dot(r, r) + eps2;
+            float invDist = inversesqrt(distSq);
+            float invDist3 = invDist * invDist * invDist;
+
+            accel += G * sharedPos[j].w * r * invDist3;
+        }
+        barrier();
+    }
+
+    // Symplectic Euler (kick-drift): first-order but preserves phase-space volume
+    vec3 newVel = vel + dt * accel;
+    vec3 newPos = pos + dt * newVel;
+
+    // Write output
+    particlesOut[gid].position = vec4(newPos, mass);
+    particlesOut[gid].velocity = vec4(newVel, p.velocity.w);
+    particlesOut[gid].attributes = p.attributes;
+}

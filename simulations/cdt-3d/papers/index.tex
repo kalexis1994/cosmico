@@ -1,0 +1,46 @@
+\section{Causal Dynamical Triangulations -- 3D}
+
+CDT in 2+1 dimensions constructs quantum spacetime from tetrahedra (3-simplices) glued along shared triangular faces, with a preferred foliation into spatial slices.
+
+\subsection{The Regge Action in 3D}
+
+The discretized Einstein--Hilbert action for 2+1 CDT is:
+
+\begin{equation}
+S = -k_0 N_0 + k_3 N_3
+\end{equation}
+
+\begin{itemize}
+\item $k_0$ -- inverse Newton's constant coupling (controls curvature)
+\item $k_3$ -- cosmological constant coupling (controls volume)
+\item $N_0$ -- number of vertices
+\item $N_3$ -- number of tetrahedra
+\end{itemize}
+
+\subsection{Pachner Moves}
+
+Three classes of bistellar moves update the 3D triangulation:
+
+\begin{itemize}
+\item $(2,6)/(6,2)$ -- vertex insertion/removal
+\item $(4,4)$ -- edge flip (re-triangulates a bipyramid)
+\item $(2,3)/(3,2)$ -- hinge move (changes the number of tetrahedra sharing an edge)
+\end{itemize}
+
+\subsection{Phase Diagram}
+
+The $(k_0, k_3)$ phase space exhibits three distinct phases:
+
+\param{Phase A}{Crumpled -- high connectivity, small Hausdorff dimension}
+\param{Phase B}{Branched polymer -- tree-like geometry, $d_H = 2$}
+\param{Phase C}{de Sitter -- extended geometry with $d_H \approx 3$, physically relevant}
+
+\subsection{Volume Profile}
+
+In the de Sitter phase (C), the spatial volume profile follows $\cos^3$ behavior:
+
+\begin{equation}
+\langle N_2(t) \rangle \propto \cos^3\!\left(\frac{\pi t}{T}\right)
+\end{equation}
+
+consistent with a Euclidean de Sitter (3-sphere) geometry.

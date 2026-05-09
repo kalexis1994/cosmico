@@ -1,0 +1,8 @@
+{
+  "title": "Sphere Collapse",
+  "description": "A uniform-density sphere of particles undergoing gravitational collapse. Demonstrates the formation of a virialized halo from a simple initial overdensity.",
+  "initialCondition": "Sphere",
+  "params": {
+    "particleCount": 65536
+  }
+}

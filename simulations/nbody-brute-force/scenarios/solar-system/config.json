@@ -1,0 +1,10 @@
+{
+  "title": "Solar System",
+  "description": "The Sun and all 8 planets with real masses, orbital radii, eccentricities, and inclinations (NASA/JPL J2000 mean elements). Units: AU, G=1, M_sun=4\u03c0\u00b2. Remaining particles populate the asteroid and Kuiper belts.",
+  "initialCondition": "SolarSystem",
+  "params": {
+    "particleCount": 8192,
+    "dt": 0.0002,
+    "softening": 0.005
+  }
+}

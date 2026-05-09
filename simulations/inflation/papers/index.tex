@@ -1,0 +1,48 @@
+\section{Cosmic Inflation}
+
+Cosmic inflation is a period of exponential expansion in the very early universe, driven by the potential energy of a scalar field $\phi$ called the inflaton.
+
+\subsection{Inflaton Field Dynamics}
+
+The evolution of the inflaton field on a lattice is governed by the Klein--Gordon equation in an expanding background:
+
+\begin{equation}
+\ddot{\phi} + 3H\dot{\phi} - \frac{\nabla^2 \phi}{a^2} + V'(\phi) = 0
+\end{equation}
+
+\begin{itemize}
+\item $\phi$ -- inflaton field value
+\item $H = \dot{a}/a$ -- Hubble parameter
+\item $a$ -- scale factor
+\item $V(\phi)$ -- inflaton potential
+\end{itemize}
+
+\subsection{Potential Models}
+
+Three inflaton potentials are implemented:
+
+\begin{equation}
+V_{\text{quadratic}}(\phi) = \frac{1}{2} m^2 \phi^2
+\end{equation}
+
+\begin{equation}
+V_{\text{Starobinsky}}(\phi) = \Lambda^4 \left(1 - e^{-\sqrt{2/3}\,\phi}\right)^2
+\end{equation}
+
+\begin{equation}
+V_{\text{hilltop}}(\phi) = V_0 \left(1 - \frac{\phi^2}{\mu^2}\right)^2
+\end{equation}
+
+\subsection{Power Spectrum}
+
+The primordial power spectrum $P(k)$ is computed via 3D FFT of the inflaton field perturbations $\delta\phi(\mathbf{x})$:
+
+\begin{equation}
+P(k) = \frac{k^3}{2\pi^2} \langle |\delta\hat{\phi}(k)|^2 \rangle
+\end{equation}
+
+The spectral index $n_s$ describes the scale dependence:
+
+\begin{equation}
+n_s - 1 = \frac{d \ln P(k)}{d \ln k}
+\end{equation}

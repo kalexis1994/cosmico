@@ -1,0 +1,18 @@
+{
+  "title": "PM Galaxy",
+  "description": "Spiral galaxy simulated with Particle-Mesh gravity and isolated (non-periodic) boundary conditions. Uses the James (1977) zero-padding convolution method for free-space Green's function.",
+  "initialCondition": "Galaxy",
+  "params": {
+    "particleCount": 262144,
+    "dt": 0.001,
+    "G": 1.0,
+    "gridSize": 128,
+    "boxSize": 80.0,
+    "openBoundary": true
+  },
+  "camera": {
+    "distance": 30.0,
+    "pitch": 0.8,
+    "yaw": 0.0
+  }
+}

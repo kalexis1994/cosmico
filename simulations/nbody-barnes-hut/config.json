@@ -1,0 +1,19 @@
+{
+  "title": "N-Body Barnes-Hut",
+  "description": "O(N log N) gravitational simulation using a CUDA-accelerated octree. The Barnes-Hut algorithm groups distant particles into multipole approximations, enabling efficient simulation of large particle counts.",
+  "backend": "BarnesHut",
+  "initialCondition": "Disk",
+  "availableConditions": ["Disk", "Sphere", "Galaxy", "GalaxyCollision", "TwoBody", "SolarSystem"],
+  "params": {
+    "particleCount": 65536,
+    "dt": 0.001,
+    "G": 1.0,
+    "softening": 0.05,
+    "theta": 0.5
+  },
+  "camera": {
+    "distance": 3.0,
+    "pitch": 0.5,
+    "yaw": 0.0
+  }
+}
