@@ -102,10 +102,52 @@ momentum. Total energy $E = T + V$ is conserved to high precision
 by the symplectic integrator, with bounded oscillations rather than
 secular drift.
 
+\section{Cosmological Initial Conditions}
+
+The cosmic web is the gravitationally amplified image of the primordial
+density field, so realistic structure formation requires a physically
+motivated initial field rather than random noise. The \textbf{Cosmological}
+preset builds a Gaussian random field with a CDM-like power spectrum and
+displaces particles using the Zel'dovich (first-order Lagrangian) approximation.
+
+A white-noise field on the grid is transformed to Fourier space and shaped
+into a density contrast with the matter power spectrum:
+
+\begin{equation}
+\hat{\delta}(\mathbf{k}) = \sqrt{P(k)}\,\hat{w}(\mathbf{k}), \qquad
+P(k) \propto k^{n_s}\,T^2(k)
+\end{equation}
+
+where $n_s$ is the primordial spectral index and $T(k)$ a transfer function
+that turns the spectrum over near the equality scale $k_\text{eq}$, suppressing
+small-scale power. Each particle, initially on a uniform Lagrangian lattice at
+position $\mathbf{q}$, is displaced by the Zel'dovich field:
+
+\begin{equation}
+\hat{\boldsymbol{\Psi}}(\mathbf{k}) = i\,\frac{\mathbf{k}}{k^2}\,T(k)\,\hat{\delta}(\mathbf{k}),
+\qquad
+\mathbf{x} = \mathbf{q} + D(a)\,\boldsymbol{\Psi}(\mathbf{q})
+\end{equation}
+
+Growing-mode peculiar velocities are seeded consistently with linear theory,
+so the field already carries the coherent infall that grows the web:
+
+\begin{equation}
+\mathbf{u} = a\,H(a)\,f\,D(a)\,\boldsymbol{\Psi}(\mathbf{q}), \qquad
+f \approx \Omega_m(a)^{0.55}
+\end{equation}
+
+The displacement amplitude $D(a)$ is normalised so the RMS displacement is a
+fixed fraction of the mean inter-particle spacing, keeping the start in the
+linear regime (displacements below the particle spacing).
+
 \section{References}
 
 \begin{itemize}
 \item Hockney, R. W. \& Eastwood, J. W. (1988). Computer Simulation Using Particles.
 \item Efstathiou, G. et al. (1985). ApJS 57, 241--260.
 \item Klypin, A. \& Holtzman, J. (1997). arXiv:astro-ph/9712217.
+\item Zel'dovich, Ya. B. (1970). A\&A 5, 84--89.
+\item Bardeen, J. M. et al. (1986). ApJ 304, 15--61.
+\item Springel, V. (2005). MNRAS 364, 1105--1134.
 \end{itemize}

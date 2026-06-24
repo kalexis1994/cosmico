@@ -1,5 +1,6 @@
 #include <cosmico/simulation/PMCompute.h>
 #include <kernels/pm_gravity.cuh>
+#include <kernels/zeldovich.cuh>
 #include <cuda_runtime.h>
 #include <cufft.h>
 #include <stdexcept>
@@ -8,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 #define CUDA_CHECK(call) \
     do { \
@@ -220,6 +222,106 @@ void PMCompute::destroy() {
 void PMCompute::setParticleBuffer(void* cudaParticlePtr, size_t bufferSize) {
     m_particlePtr = cudaParticlePtr;
     m_particleBufferSize = bufferSize;
+}
+
+// ─── Cosmological initial conditions (Zel'dovich 1LPT) ───────────────────
+// Replaces the old white-noise jitter: builds a Gaussian random field with a
+// CDM-shaped spectrum P(k) ∝ k^ns·T²(k), takes its Zel'dovich displacement
+// Ψ(k) = i·k/k²·T(k)·δ(k), and moves each particle x = q + D·Ψ(q) while seeding
+// growing-mode peculiar velocities u = a·H·f·(D·Ψ). The displacement amplitude
+// D is fixed by normalising the RMS displacement to a target fraction of the
+// mean inter-particle spacing (a robust proxy for σ₈ / start redshift).
+void PMCompute::generateCosmologicalIC(const PMParams& params, void* cudaStream) {
+    if (!m_particlePtr || m_particleCount == 0 || m_currentGridN == 0) return;
+
+    cudaStream_t stream = static_cast<cudaStream_t>(cudaStream);
+    auto* particles = static_cast<cuda::ParticleGpu*>(m_particlePtr);
+
+    int N = m_currentGridN;
+    int N3 = N * N * N;
+    int Ncomplex = N * N * (N / 2 + 1);
+    float L = params.boxSize;
+    static constexpr float PI_F = 3.14159265358979323846f;
+    float dk = 2.0f * PI_F / L;
+    float keq = dk * (float)(N / 8);   // CDM turnover scale (matches viz convention)
+
+    CUFFT_CHECK(cufftSetStream(m_planR2C, stream));
+    CUFFT_CHECK(cufftSetStream(m_planC2R, stream));
+
+    // Scratch δ̂ buffer, kept pristine while each axis solve overwrites m_d_density_hat.
+    cufftComplex* d_deltaHat = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_deltaHat, (size_t)Ncomplex * sizeof(cufftComplex)));
+
+    // 1. White noise → 2. FFT → 3. spectral tilt  ⇒  δ̂ ∝ k^(ns/2)·white(k)
+    cuda::launchZeldovichWhiteNoise(static_cast<float*>(m_d_density), N3,
+                                    (unsigned int)params.zeldovichSeed, stream);
+    CUFFT_CHECK(cufftExecR2C(m_planR2C,
+                             static_cast<cufftReal*>(m_d_density), d_deltaHat));
+    cuda::launchZeldovichTilt(d_deltaHat, N, Ncomplex, params.ns, stream);
+
+    // 4. Per-axis displacement field s_d(q): apply i·k_d/k²·T(k) then IFFT.
+    void* sBuf[3] = { m_d_forceX, m_d_forceY, m_d_forceZ };
+    for (int dir = 0; dir < 3; dir++) {
+        CUDA_CHECK(cudaMemcpyAsync(m_d_density_hat, d_deltaHat,
+                                   (size_t)Ncomplex * sizeof(cufftComplex),
+                                   cudaMemcpyDeviceToDevice, stream));
+        cuda::launchDisplacementMultiply(
+            static_cast<cufftComplex*>(m_d_density_hat),
+            N, Ncomplex, dk, L, dir, keq, stream);
+        CUFFT_CHECK(cufftExecC2R(m_planC2R,
+                                 static_cast<cufftComplex*>(m_d_density_hat),
+                                 static_cast<cufftReal*>(sBuf[dir])));
+    }
+
+    // 5. Measure the per-component RMS of the displacement to set amplitude.
+    // The field is statistically isotropic, so RMS|s| = √3 · σ₁ — read back one
+    // component to keep the transfer small even on large grids.
+    std::vector<float> hsx(N3);
+    CUDA_CHECK(cudaMemcpyAsync(hsx.data(), m_d_forceX, N3 * sizeof(float),
+                               cudaMemcpyDeviceToHost, stream));
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    double sumSq = 0.0;
+    for (int i = 0; i < N3; i++) sumSq += (double)hsx[i] * hsx[i];
+    float sigma1 = (float)std::sqrt(sumSq / (double)N3);
+    float rms = sigma1 * 1.7320508f;   // √3 · σ₁  ≈ RMS displacement magnitude
+    if (rms < 1e-20f) rms = 1e-20f;
+
+    // 6. Amplitude: target RMS displacement = amplitude × mean particle spacing.
+    int perSide = (int)std::ceil(std::cbrt((float)m_particleCount));
+    float spacing = L / (float)perSide;
+    float dispScale = (params.zeldovichAmplitude * spacing) / rms;
+
+    // 7. Growing-mode peculiar velocity factor u = a·H(a)·f(a) (comoving only).
+    float velFactor = 0.0f;
+    float aStart = params.comoving ? params.aInit : 1.0f;
+    if (params.comoving) {
+        float a = params.aInit;
+        float OmegaL = std::max(0.0f, 1.0f - params.OmegaM);
+        float Ha = params.H0 * std::sqrt(params.OmegaM / (a * a * a) + OmegaL);
+        float OmegaMa = (params.OmegaM / (a * a * a))
+                      / (params.OmegaM / (a * a * a) + OmegaL);
+        float f = std::pow(OmegaMa, 0.55f);   // Linder growth-rate approximation
+        velFactor = a * Ha * f;
+    }
+
+    // 8. Displace particles off their Lagrangian lattice and seed velocities.
+    cuda::launchZeldovichApplyToParticles(particles, m_particleCount,
+        static_cast<const float*>(m_d_forceX),
+        static_cast<const float*>(m_d_forceY),
+        static_cast<const float*>(m_d_forceZ),
+        N, perSide, L, dispScale, velFactor, stream);
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    cudaFree(d_deltaHat);
+
+    // Continue evolution from the start scale factor.
+    m_scaleFactor = aStart;
+
+    fprintf(stderr, "[PM] Zel'dovich IC: grid=%d^3, %d particles, "
+                    "rmsDisp=%.4g (target %.4g, %.0f%% of spacing), velFactor=%.4g, a=%.3f\n",
+            N, m_particleCount, rms, params.zeldovichAmplitude * spacing,
+            100.0f * params.zeldovichAmplitude, velFactor, aStart);
 }
 
 void PMCompute::updateParticleCount(int count) {

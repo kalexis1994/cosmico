@@ -41,6 +41,13 @@ public:
     // Set the particle buffer pointer (CUDA device pointer from interop)
     void setParticleBuffer(void* cudaParticlePtr, size_t bufferSize);
 
+    // Seed cosmological initial conditions in-place on the particle buffer:
+    // a Zel'dovich (1LPT) displacement of a uniform Lagrangian lattice with a
+    // P(k) ∝ k^ns·T²(k) Gaussian random field plus growing-mode velocities.
+    // Reuses the existing FFT plans and grid buffers. Call once after the
+    // lattice has been uploaded to the interop buffer.
+    void generateCosmologicalIC(const PMParams& params, void* cudaStream);
+
     // Execute one simulation step
     void step(const PMParams& params, void* cudaStream);
 

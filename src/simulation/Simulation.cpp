@@ -384,6 +384,11 @@ void Simulation::reset(VkContext& ctx, InitialCondition ic) {
         if (m_pmCompute) {
             m_pmCompute->updateParticleCount(m_params.particleCount);
             m_pmCompute->resetState();
+            // Replace the uploaded uniform lattice with a Zel'dovich (1LPT)
+            // cosmological field — the realistic seed for structure formation.
+            if (ic == InitialCondition::Cosmological && m_cudaInterop) {
+                m_pmCompute->generateCosmologicalIC(m_pmParams, m_cudaInterop->stream());
+            }
         }
         m_semaphoreValue = 0;
     } else if (m_backend == ComputeBackend::BarnesHut && m_particles->isExportable()) {

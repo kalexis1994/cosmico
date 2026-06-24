@@ -19,6 +19,14 @@ struct PMParams {
     float OmegaM = 1.0f;               // Matter density parameter (EdS default)
     float aInit = 0.5f;                // Initial scale factor (z_init = 1)
 
+    // Cosmological initial conditions (Zel'dovich 1LPT — used by the
+    // "Cosmological" IC). A Gaussian random field with P(k) ∝ k^ns·T²(k)
+    // displaces particles off a uniform lattice and seeds growing-mode
+    // peculiar velocities, replacing the old white-noise jitter.
+    float ns = 0.96f;                  // Primordial spectral index
+    float zeldovichAmplitude = 0.2f;   // Initial RMS displacement / mean particle spacing
+    int   zeldovichSeed = 1234;        // Seed for the Gaussian random field
+
     // Corrections
     bool correctMomentum = true;        // Subtract mean velocity each step
 
