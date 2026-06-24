@@ -732,7 +732,13 @@ void Application::renderDetailState() {
         // Apply scenario-specific params (overrides parent defaults)
         if (selectedScenarioIndex >= 0) {
             const auto* sc = m_catalog->scenario(m_selectedSimIndex, selectedScenarioIndex);
-            if (sc) m_simulation->params() = sc->params;
+            if (sc) {
+                m_simulation->params() = sc->params;
+                if (selEntry.backend == ComputeBackend::PM ||
+                    selEntry.backend == ComputeBackend::NodeGraph) {
+                    m_simulation->pmParams() = sc->pmParams;
+                }
+            }
         }
 
         m_pendingReset = true;  // Force reset with the scenario's IC

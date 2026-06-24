@@ -1,6 +1,7 @@
 #pragma once
 #include <cosmico/simulation/Simulation.h>
 #include <cosmico/simulation/InitialConditions.h>
+#include <cosmico/simulation/PMParams.h>
 #include <volk.h>
 #include <vk_mem_alloc.h>
 #include <string>
@@ -29,6 +30,7 @@ struct ScenarioEntry {
     VkDescriptorSet previewTexture = VK_NULL_HANDLE;
     bool loaded = false;
     SimulationParams params;      // merged: parent defaults + scenario overrides
+    PMParams pmParams;            // PM/cosmology params (grid, box, comoving, …)
 };
 
 struct SimulationEntry {
@@ -46,6 +48,7 @@ struct SimulationEntry {
     bool loaded = false;          // Preview texture loaded
 
     SimulationParams defaultParams;                // from config.json "params"
+    PMParams pmDefaults;                            // PM/cosmology params from config.json
     CameraConfig cameraConfig;                     // from config.json "camera"
     std::vector<std::string> availableConditions;  // ["Cosmological", "Sphere"]
     std::vector<ScenarioEntry> scenarios;          // from scenarios/ subfolder

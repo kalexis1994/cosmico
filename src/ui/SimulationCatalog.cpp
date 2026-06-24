@@ -146,6 +146,24 @@ void SimulationCatalog::scanFolder() {
             if (p.contains("particleCount")) entry.defaultParams.particleCount = p["particleCount"].get<int>();
         }
 
+        // PM / cosmology params (grid, box, expansion, IC spectrum). Mirror the
+        // shared fields so PM and the generic struct agree, then read PM extras.
+        entry.pmDefaults.particleCount = entry.defaultParams.particleCount;
+        entry.pmDefaults.dt            = entry.defaultParams.dt;
+        entry.pmDefaults.G             = entry.defaultParams.G;
+        entry.pmDefaults.softening     = entry.defaultParams.softening;
+        if (config.contains("params") && config["params"].is_object()) {
+            auto& p = config["params"];
+            entry.pmDefaults.gridN              = p.value("gridSize", entry.pmDefaults.gridN);
+            entry.pmDefaults.boxSize            = p.value("boxSize", entry.pmDefaults.boxSize);
+            entry.pmDefaults.stepsPerFrame      = p.value("stepsPerFrame", entry.pmDefaults.stepsPerFrame);
+            entry.pmDefaults.H0                 = p.value("H0", entry.pmDefaults.H0);
+            entry.pmDefaults.OmegaM             = p.value("omegaM", entry.pmDefaults.OmegaM);
+            entry.pmDefaults.aInit              = p.value("aInit", entry.pmDefaults.aInit);
+            entry.pmDefaults.ns                 = p.value("ns", entry.pmDefaults.ns);
+            entry.pmDefaults.zeldovichAmplitude = p.value("zeldovichAmplitude", entry.pmDefaults.zeldovichAmplitude);
+        }
+
         // Parse camera configuration
         if (config.contains("camera") && config["camera"].is_object()) {
             auto& c = config["camera"];
@@ -226,6 +244,24 @@ void SimulationCatalog::scanScenarios(SimulationEntry& entry, const std::string&
             if (p.contains("softening"))     sc.params.softening = p["softening"].get<float>();
             if (p.contains("theta"))         sc.params.theta = p["theta"].get<float>();
             if (p.contains("particleCount")) sc.params.particleCount = p["particleCount"].get<int>();
+        }
+
+        // PM / cosmology params: inherit parent PM defaults, then override.
+        sc.pmParams = entry.pmDefaults;
+        sc.pmParams.particleCount = sc.params.particleCount;
+        sc.pmParams.dt            = sc.params.dt;
+        sc.pmParams.G             = sc.params.G;
+        sc.pmParams.softening     = sc.params.softening;
+        if (config.contains("params") && config["params"].is_object()) {
+            auto& p = config["params"];
+            sc.pmParams.gridN              = p.value("gridSize", sc.pmParams.gridN);
+            sc.pmParams.boxSize            = p.value("boxSize", sc.pmParams.boxSize);
+            sc.pmParams.stepsPerFrame      = p.value("stepsPerFrame", sc.pmParams.stepsPerFrame);
+            sc.pmParams.H0                 = p.value("H0", sc.pmParams.H0);
+            sc.pmParams.OmegaM             = p.value("omegaM", sc.pmParams.OmegaM);
+            sc.pmParams.aInit              = p.value("aInit", sc.pmParams.aInit);
+            sc.pmParams.ns                 = p.value("ns", sc.pmParams.ns);
+            sc.pmParams.zeldovichAmplitude = p.value("zeldovichAmplitude", sc.pmParams.zeldovichAmplitude);
         }
 
         auto previewPath = dirEntry.path() / "preview.png";

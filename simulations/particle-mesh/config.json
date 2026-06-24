@@ -5,11 +5,16 @@
   "initialCondition": "Cosmological",
   "availableConditions": ["Cosmological", "Sphere", "Disk", "Galaxy"],
   "params": {
-    "particleCount": 131072,
+    "particleCount": 262144,
     "dt": 0.005,
     "G": 1.0,
     "gridSize": 128,
-    "boxSize": 100.0
+    "boxSize": 100.0,
+    "stepsPerFrame": 10,
+    "omegaM": 0.3,
+    "aInit": 0.5,
+    "ns": 0.96,
+    "zeldovichAmplitude": 0.2
   },
   "camera": {
     "distance": 150.0,

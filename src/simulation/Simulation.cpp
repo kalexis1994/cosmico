@@ -386,6 +386,10 @@ void Simulation::reset(VkContext& ctx, InitialCondition ic) {
             m_pmCompute->resetState();
             // Replace the uploaded uniform lattice with a Zel'dovich (1LPT)
             // cosmological field — the realistic seed for structure formation.
+            // Structure formation lives in the expanding (comoving) frame, which
+            // is also what seeds the growing-mode peculiar velocities. Tying
+            // expansion to the IC also avoids comoving "leaking" into other ICs.
+            m_pmParams.comoving = (ic == InitialCondition::Cosmological);
             if (ic == InitialCondition::Cosmological && m_cudaInterop) {
                 m_pmCompute->generateCosmologicalIC(m_pmParams, m_cudaInterop->stream());
             }
@@ -533,6 +537,12 @@ void Simulation::resetPM(VkContext& ctx, InitialCondition ic) {
     }
     m_pmCompute->updateParticleCount(m_pmParams.particleCount);
     m_pmCompute->resetState();
+    // Cosmological IC: replace the uniform lattice with a Zel'dovich (1LPT)
+    // field in the expanding (comoving) frame, which seeds growing-mode velocities.
+    m_pmParams.comoving = (ic == InitialCondition::Cosmological);
+    if (ic == InitialCondition::Cosmological && m_cudaInterop) {
+        m_pmCompute->generateCosmologicalIC(m_pmParams, m_cudaInterop->stream());
+    }
     m_semaphoreValue = 0;
 }
 

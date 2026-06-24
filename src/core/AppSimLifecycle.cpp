@@ -39,6 +39,9 @@ void Application::initSimulation(int catalogIndex, InitialCondition icOverride) 
 
     // Apply params from config.json
     m_simulation->params() = entry.defaultParams;
+    if (entry.backend == ComputeBackend::PM || entry.backend == ComputeBackend::NodeGraph) {
+        m_simulation->pmParams() = entry.pmDefaults;
+    }
 
     // Set backend
     m_simulation->setBackend(*m_context, entry.backend);
