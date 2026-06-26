@@ -62,3 +62,6 @@ recordings/
 
 # ─── Local archive (legacy / WIP files kept off-tree) ─────────────
 _archive/
+
+# ─── Local deploy scripts (machine / LAN-specific, not shared) ─────
+/scripts/deploy-*.ps1
