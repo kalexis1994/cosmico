@@ -66,7 +66,12 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
     }
     ImGui::SliderFloat("dt (timestep)", &params.dt, 0.000001f, 0.01f, "%.6f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("Box Size", &params.boxSize, 10.0f, 500.0f, "%.0f");
-    ImGui::SliderInt("Steps/frame", &params.stepsPerFrame, 1, 20);
+    ImGui::SliderInt("Steps/frame", &params.stepsPerFrame, 1, 40);
+    ImGui::SliderFloat("Force smoothing", &params.forceSmoothing, 0.2f, 3.0f, "%.2f");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("PM force Gaussian smoothing (x particle spacing)\n"
+                          "lower = sharper filaments/halos, higher = smoother/diffuse");
+    }
     ImGui::Checkbox("Open Boundary", &params.openBoundary);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("No periodic wrapping (infinite box)");
@@ -128,6 +133,18 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Initial scale factor (z_init = 1/a - 1)\n"
                               "0.1 = z~9, 0.5 = z~1, 1.0 = today");
+        }
+        ImGui::SliderFloat("a_max (freeze)", &params.aMax, 0.5f, 100.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Freeze expansion past this scale factor.\n"
+                              "High = keep expanding (web freezes in place);\n"
+                              "low = stop expanding (keeps collapsing to center)");
+        }
+        ImGui::SliderFloat("IC amplitude", &params.zeldovichAmplitude, 0.05f, 0.8f, "%.2f");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Initial Zel'dovich displacement (x spacing).\n"
+                              "Higher = more initial structure / faster collapse.\n"
+                              "Press Reset to apply.");
         }
         ImGui::SliderFloat("Damping", &params.damping, 0.0f, 20.0f, "%.1f");
         if (ImGui::IsItemHovered()) {

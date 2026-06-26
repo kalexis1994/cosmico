@@ -127,8 +127,10 @@ private:
     PMStateData m_state;
 
     // Sink particle buffers
-    void* m_d_sinkCount = nullptr;         // int[1] — device counter for sinks
-    void* m_d_newParticleCount = nullptr;  // int[1] — device counter for active particles
+    static constexpr int MAX_SINKS = 256;  // cap so accretion stays O(N·nSinks)
+    void* m_d_sinkCount = nullptr;         // int[1] — sink list size
+    void* m_d_newParticleCount = nullptr;  // int[1] — device counter for absorbed particles
+    void* m_d_sinkList = nullptr;          // int[MAX_SINKS] — compact sink indices
 
     // Host staging
     double m_h_energySums[6] = {};

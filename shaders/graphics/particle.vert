@@ -21,6 +21,7 @@ layout(push_constant) uniform PushConstants {
     vec4 camForward;  // xyz = fwd,   w = camPos.z
     float simTime;
     float showDarkMatter;
+    float lumStrength;
 };
 
 layout(location = 0) out float outSpeed;
@@ -28,6 +29,8 @@ layout(location = 1) out float outType;
 layout(location = 2) out float outVisualRadius;
 layout(location = 3) out vec3 outSphereWorldPos;
 layout(location = 4) out vec2 outUV;
+layout(location = 5) out float outLum;   // local overdensity δ (PM luminosity)
+layout(location = 6) out float outMass;  // particle mass (accreted = bright)
 
 // 6 vertices for a quad (2 triangles)
 const vec2 QUAD_CORNERS[6] = vec2[6](
@@ -52,6 +55,8 @@ void main() {
         outVisualRadius = 0.0;
         outSphereWorldPos = vec3(0.0);
         outUV = vec2(0.0);
+        outLum = 0.0;
+        outMass = 0.0;
         return;
     }
 
@@ -131,6 +136,8 @@ void main() {
 
     outSpeed = length(p.velocity.xyz);
     outType = particleType;
+    outLum = p.attributes.x;   // local overdensity stored by the PM step
+    outMass = p.position.w;
     // outVisualRadius already set: smoothingRadius (sphere) or sub-pixel alpha (particle)
     outSphereWorldPos = worldPos;
 }

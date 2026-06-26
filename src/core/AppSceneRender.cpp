@@ -151,6 +151,9 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
         pc.camForward[2] = fwd.z; pc.camForward[3] = camPos.z;
         pc.simTime = static_cast<float>(m_simTime);
         pc.showDarkMatter = m_simulation->params().showDarkMatter ? 1.0f : 0.0f;
+        // Density-luminosity shading: only the PM backend writes the per-particle
+        // overdensity the shader needs; others keep the legacy speed coloring.
+        pc.lumStrength = (m_simulation->backend() == ComputeBackend::PM) ? 1.0f : 0.0f;
 
         VkDescriptorSet texSet = m_planetTextures
             ? m_planetTextures->descriptorSet() : VK_NULL_HANDLE;

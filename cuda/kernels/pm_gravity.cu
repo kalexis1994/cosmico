@@ -628,113 +628,126 @@ void launchPMPowerSpectrum(const cufftComplex* density_hat, int gridN,
         density_hat, gridN, Ncomplex, d_spectrum, d_counts, nBins, dk);
 }
 
+// ─── Per-particle local overdensity (for luminosity rendering) ───────
+// CIC-sample the density grid at each particle and store δ = ρ/ρ̄ in the
+// particle's density attribute, so the shader can light dense regions
+// (filaments/halos) like stars and leave diffuse void matter dim.
+__global__ void pmStoreLuminosityKernel(ParticleGpu* __restrict__ particles,
+                                        const float* __restrict__ density,
+                                        int particleCount, int N, float boxSize,
+                                        float meanDensity) {
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= particleCount) return;
+    if (particles[pid].type < 0.0f) return;  // absorbed — leave as is
+
+    float invCell = (float)N / boxSize;
+    float x = particles[pid].px - floorf(particles[pid].px / boxSize) * boxSize;
+    float y = particles[pid].py - floorf(particles[pid].py / boxSize) * boxSize;
+    float z = particles[pid].pz - floorf(particles[pid].pz / boxSize) * boxSize;
+    float gx = x * invCell, gy = y * invCell, gz = z * invCell;
+
+    int ix0 = (int)floorf(gx - 0.5f);
+    int iy0 = (int)floorf(gy - 0.5f);
+    int iz0 = (int)floorf(gz - 0.5f);
+    float wx = gx - 0.5f - (float)ix0;
+    float wy = gy - 0.5f - (float)iy0;
+    float wz = gz - 0.5f - (float)iz0;
+
+    float rho = 0.0f;
+    for (int di = 0; di < 2; di++) {
+        float fx = (di == 0) ? (1.0f - wx) : wx;
+        int cix = (((ix0 + di) % N) + N) % N;
+        for (int dj = 0; dj < 2; dj++) {
+            float fy = (dj == 0) ? (1.0f - wy) : wy;
+            int ciy = (((iy0 + dj) % N) + N) % N;
+            for (int dk = 0; dk < 2; dk++) {
+                float fz = (dk == 0) ? (1.0f - wz) : wz;
+                int ciz = (((iz0 + dk) % N) + N) % N;
+                rho += density[cix * N * N + ciy * N + ciz] * fx * fy * fz;
+            }
+        }
+    }
+
+    particles[pid].density = (meanDensity > 1e-20f) ? (rho / meanDensity) : 0.0f;
+}
+
+void launchPMStoreLuminosity(ParticleGpu* particles, const float* density,
+                             int particleCount, int gridN, float boxSize,
+                             float meanDensity, cudaStream_t stream) {
+    int blocks = (particleCount + PM_BLOCK - 1) / PM_BLOCK;
+    pmStoreLuminosityKernel<<<blocks, PM_BLOCK, 0, stream>>>(
+        particles, density, particleCount, gridN, boxSize, meanDensity);
+}
+
 // ─── 12. Sink formation: create sinks in high-density cells ──────────
 // Each normal particle checks its local density. If ρ > threshold × ρ_mean,
 // and it is the most massive particle in its cell, it becomes a sink.
 // Nearby particles within sinkRadius are absorbed (type = -1).
 
+// Sinks are tracked by type>0 (persistent). A compact index list (d_sinkList,
+// size d_sinkCount, capped at maxSinks) lets accretion run in O(N·nSinks)
+// instead of O(N²) — the all-pairs version hung the GPU and tripped the driver
+// watchdog (TDR) once structure collapsed and many cells were dense.
+
+// List every existing sink (type>0) into d_sinkList (capped).
+__global__ void pmSinkBuildListKernel(const ParticleGpu* __restrict__ particles,
+                                       int particleCount, int maxSinks,
+                                       int* __restrict__ d_sinkList,
+                                       int* __restrict__ d_sinkCount) {
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= particleCount) return;
+    if (particles[pid].type <= 0.0f) return;
+    int idx = atomicAdd(d_sinkCount, 1);
+    if (idx < maxSinks) d_sinkList[idx] = pid;
+}
+
+// Form new sinks at normal particles in cells above the density threshold and
+// append them to the same list (capped). Absorption is handled separately by
+// pmSinkAccretionKernel, so there is no O(N) inner loop here.
 __global__ void pmSinkFormationKernel(ParticleGpu* __restrict__ particles,
                                        const float* __restrict__ density,
                                        int particleCount, int gridN,
                                        float boxSize, float threshold,
-                                       float sinkRadius,
+                                       int maxSinks,
+                                       int* __restrict__ d_sinkList,
                                        int* __restrict__ d_sinkCount) {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= particleCount) return;
     if (particles[pid].type != 0.0f) return;  // Only normal particles
 
     float invCell = (float)gridN / boxSize;
-
-    float x = particles[pid].px;
-    float y = particles[pid].py;
-    float z = particles[pid].pz;
-
-    // Wrap to [0, boxSize)
-    x = x - floorf(x / boxSize) * boxSize;
-    y = y - floorf(y / boxSize) * boxSize;
-    z = z - floorf(z / boxSize) * boxSize;
-
-    // NGP cell index
-    int ix = (int)(x * invCell) % gridN;
-    int iy = (int)(y * invCell) % gridN;
-    int iz = (int)(z * invCell) % gridN;
-    if (ix < 0) ix += gridN;
-    if (iy < 0) iy += gridN;
-    if (iz < 0) iz += gridN;
+    float x = particles[pid].px - floorf(particles[pid].px / boxSize) * boxSize;
+    float y = particles[pid].py - floorf(particles[pid].py / boxSize) * boxSize;
+    float z = particles[pid].pz - floorf(particles[pid].pz / boxSize) * boxSize;
+    int ix = (((int)(x * invCell)) % gridN + gridN) % gridN;
+    int iy = (((int)(y * invCell)) % gridN + gridN) % gridN;
+    int iz = (((int)(z * invCell)) % gridN + gridN) % gridN;
 
     float localDensity = density[ix * gridN * gridN + iy * gridN + iz];
-
-    // Compute mean density
-    float cellVol = boxSize / (float)gridN;
-    cellVol = cellVol * cellVol * cellVol;
-    float totalMass = (float)particleCount;  // Assume unit mass particles initially
-    float meanDensity = totalMass / (boxSize * boxSize * boxSize) * cellVol;
-
-    // Check threshold
+    // Deposit stores mass/cellVol, so the mean over the grid is N/boxSize³.
+    float meanDensity = (float)particleCount / (boxSize * boxSize * boxSize);
     if (localDensity < threshold * meanDensity) return;
 
-    // Use atomicCAS on type to claim this particle as a new sink
-    // Only the first particle in a high-density region becomes a sink
-    float oldType = atomicExch(&particles[pid].type, 1.0f);
-    if (oldType != 0.0f) return;  // Someone else got here first
-
-    atomicAdd(d_sinkCount, 1);
-
-    // Now absorb nearby normal particles
-    float r2max = sinkRadius * sinkRadius;
-
-    for (int j = 0; j < particleCount; j++) {
-        if (j == pid) continue;
-        if (particles[j].type != 0.0f) continue;  // Only absorb normal particles
-
-        float dx = particles[j].px - particles[pid].px;
-        float dy = particles[j].py - particles[pid].py;
-        float dz = particles[j].pz - particles[pid].pz;
-
-        // Periodic wrap
-        float half = boxSize * 0.5f;
-        if (dx > half) dx -= boxSize;
-        if (dx < -half) dx += boxSize;
-        if (dy > half) dy -= boxSize;
-        if (dy < -half) dy += boxSize;
-        if (dz > half) dz -= boxSize;
-        if (dz < -half) dz += boxSize;
-
-        float r2 = dx * dx + dy * dy + dz * dz;
-        if (r2 > r2max) continue;
-
-        // Try to absorb this particle
-        float neighborType = atomicExch(&particles[j].type, -1.0f);
-        if (neighborType != 0.0f) continue;  // Already absorbed or is a sink
-
-        // Merge: conserve mass and momentum
-        float mSink = particles[pid].mass;
-        float mNeighbor = particles[j].mass;
-        float mTotal = mSink + mNeighbor;
-
-        if (mTotal > 0.0f) {
-            float invTotal = 1.0f / mTotal;
-            particles[pid].vx = (mSink * particles[pid].vx + mNeighbor * particles[j].vx) * invTotal;
-            particles[pid].vy = (mSink * particles[pid].vy + mNeighbor * particles[j].vy) * invTotal;
-            particles[pid].vz = (mSink * particles[pid].vz + mNeighbor * particles[j].vz) * invTotal;
-        }
-
-        particles[pid].mass = mTotal;
-        // Update sink type to reflect accreted mass (visual indicator)
-        particles[pid].type = fmaxf(1.0f, mTotal);
-    }
+    // Claim a list slot; if the sink cap is reached, stay a normal particle.
+    int idx = atomicAdd(d_sinkCount, 1);
+    if (idx >= maxSinks) { atomicSub(d_sinkCount, 1); return; }
+    particles[pid].type = 1.0f;
+    d_sinkList[idx] = pid;
 }
 
 void launchPMSinkFormation(ParticleGpu* particles, const float* density,
                            int particleCount, int gridN, float boxSize,
-                           float threshold, float sinkRadius,
-                           int* d_sinkCount, int* d_newParticleCount,
+                           float threshold, int maxSinks,
+                           int* d_sinkList, int* d_sinkCount,
                            cudaStream_t stream) {
     cudaMemsetAsync(d_sinkCount, 0, sizeof(int), stream);
     int blocks = (particleCount + PM_BLOCK - 1) / PM_BLOCK;
+    // List existing sinks, then append newly-formed ones (both capped).
+    pmSinkBuildListKernel<<<blocks, PM_BLOCK, 0, stream>>>(
+        particles, particleCount, maxSinks, d_sinkList, d_sinkCount);
     pmSinkFormationKernel<<<blocks, PM_BLOCK, 0, stream>>>(
         particles, density, particleCount, gridN, boxSize,
-        threshold, sinkRadius, d_sinkCount);
+        threshold, maxSinks, d_sinkList, d_sinkCount);
 }
 
 // ─── 13. Sink accretion: absorb particles near existing sinks ────────
@@ -756,24 +769,31 @@ __global__ void pmSinkPrepareKernel(ParticleGpu* __restrict__ particles,
     particles[pid].smoothing = m * particles[pid].vz;
 }
 
-// Pass 2: Each normal particle finds nearest sink within radius and gets absorbed
+// Pass 2: Each normal particle finds nearest sink within radius and gets absorbed.
+// Loops over the compact sink list (≤ maxSinks) — O(N·nSinks), not O(N²).
 __global__ void pmSinkAccretionKernel(ParticleGpu* __restrict__ particles,
                                        int particleCount, float sinkRadius,
-                                       float boxSize) {
+                                       float boxSize,
+                                       const int* __restrict__ d_sinkList,
+                                       const int* __restrict__ d_sinkCount,
+                                       int maxSinks) {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= particleCount) return;
     if (particles[pid].type != 0.0f) return;  // Only normal particles
 
+    int nSinks = *d_sinkCount;
+    if (nSinks > maxSinks) nSinks = maxSinks;
+    if (nSinks <= 0) return;
+
     float r2max = sinkRadius * sinkRadius;
     float half = boxSize * 0.5f;
 
-    // Find nearest sink
+    // Find nearest sink (from the compact list)
     int nearestSink = -1;
     float nearestR2 = r2max;
 
-    for (int j = 0; j < particleCount; j++) {
-        if (particles[j].type <= 0.0f) continue;  // Only sinks (type > 0)
-
+    for (int s = 0; s < nSinks; s++) {
+        int j = d_sinkList[s];
         float dx = particles[pid].px - particles[j].px;
         float dy = particles[pid].py - particles[j].py;
         float dz = particles[pid].pz - particles[j].pz;
@@ -842,24 +862,31 @@ __global__ void pmSinkCountKernel(const ParticleGpu* __restrict__ particles,
 }
 
 void launchPMSinkAccretion(ParticleGpu* particles, int particleCount,
-                           float sinkRadius, float boxSize,
-                           int* d_sinkCount, int* d_newParticleCount,
-                           cudaStream_t stream) {
+                           float sinkRadius, float boxSize, int maxSinks,
+                           int* d_sinkList, int* d_sinkCount,
+                           int* d_newParticleCount, cudaStream_t stream) {
     int blocks = (particleCount + PM_BLOCK - 1) / PM_BLOCK;
+
+    // (Re)build the compact sink list so accretion is self-contained — works
+    // whether or not a sink-formation pass ran first (e.g. the node graph).
+    cudaMemsetAsync(d_sinkCount, 0, sizeof(int), stream);
+    pmSinkBuildListKernel<<<blocks, PM_BLOCK, 0, stream>>>(
+        particles, particleCount, maxSinks, d_sinkList, d_sinkCount);
 
     // Pass 1: Store current sink momentum in scratch fields
     pmSinkPrepareKernel<<<blocks, PM_BLOCK, 0, stream>>>(
         particles, particleCount);
 
-    // Pass 2: Accrete normal particles into nearest sinks
+    // Pass 2: Accrete normal particles into the nearest listed sink
     pmSinkAccretionKernel<<<blocks, PM_BLOCK, 0, stream>>>(
-        particles, particleCount, sinkRadius, boxSize);
+        particles, particleCount, sinkRadius, boxSize,
+        d_sinkList, d_sinkCount, maxSinks);
 
     // Pass 3: Convert accumulated momentum back to velocity
     pmSinkFinalizeKernel<<<blocks, PM_BLOCK, 0, stream>>>(
         particles, particleCount);
 
-    // Count sinks and absorbed
+    // Count sinks and absorbed (for the UI)
     cudaMemsetAsync(d_sinkCount, 0, sizeof(int), stream);
     cudaMemsetAsync(d_newParticleCount, 0, sizeof(int), stream);
     pmSinkCountKernel<<<blocks, PM_BLOCK, 0, stream>>>(

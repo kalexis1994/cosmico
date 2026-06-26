@@ -83,9 +83,10 @@ void PMCompute::allocateGridBuffers(int N) {
     CUDA_CHECK(cudaMalloc(&m_d_spectrum, m_nBins * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&m_d_counts, m_nBins * sizeof(int)));
 
-    // Sink particle counters
+    // Sink particle counters + compact sink index list
     CUDA_CHECK(cudaMalloc(&m_d_sinkCount, sizeof(int)));
     CUDA_CHECK(cudaMalloc(&m_d_newParticleCount, sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&m_d_sinkList, MAX_SINKS * sizeof(int)));
 
     m_currentGridN = N;
 
@@ -104,6 +105,7 @@ void PMCompute::freeGridBuffers() {
     if (m_d_counts) { cudaFree(m_d_counts); m_d_counts = nullptr; }
     if (m_d_sinkCount) { cudaFree(m_d_sinkCount); m_d_sinkCount = nullptr; }
     if (m_d_newParticleCount) { cudaFree(m_d_newParticleCount); m_d_newParticleCount = nullptr; }
+    if (m_d_sinkList) { cudaFree(m_d_sinkList); m_d_sinkList = nullptr; }
     freeIsolatedBuffers();
     m_currentGridN = 0;
 }
@@ -243,7 +245,12 @@ void PMCompute::generateCosmologicalIC(const PMParams& params, void* cudaStream)
     float L = params.boxSize;
     static constexpr float PI_F = 3.14159265358979323846f;
     float dk = 2.0f * PI_F / L;
-    float keq = dk * (float)(N / 8);   // CDM turnover scale (matches viz convention)
+    // Real BBKS transfer function: map grid modes to physical k [h/Mpc] and use
+    // the CDM shape parameter Γ = Ωm·h·exp(−Ωb(1+√(2h)/Ωm)) (Sugiyama 1995).
+    float hh = params.hubbleH;
+    float kf = 2.0f * PI_F / std::max(params.boxSizeMpc, 1e-3f);  // fundamental k [h/Mpc]
+    float gamma = params.OmegaM * hh
+        * std::exp(-params.omegaB * (1.0f + std::sqrt(2.0f * hh) / std::max(params.OmegaM, 1e-3f)));
 
     CUFFT_CHECK(cufftSetStream(m_planR2C, stream));
     CUFFT_CHECK(cufftSetStream(m_planC2R, stream));
@@ -257,7 +264,7 @@ void PMCompute::generateCosmologicalIC(const PMParams& params, void* cudaStream)
                                     (unsigned int)params.zeldovichSeed, stream);
     CUFFT_CHECK(cufftExecR2C(m_planR2C,
                              static_cast<cufftReal*>(m_d_density), d_deltaHat));
-    cuda::launchZeldovichTilt(d_deltaHat, N, Ncomplex, params.ns, stream);
+    cuda::launchZeldovichTilt(d_deltaHat, N, Ncomplex, params.ns, kf, gamma, stream);
 
     // 4. Per-axis displacement field s_d(q): apply i·k_d/k²·T(k) then IFFT.
     void* sBuf[3] = { m_d_forceX, m_d_forceY, m_d_forceZ };
@@ -265,9 +272,11 @@ void PMCompute::generateCosmologicalIC(const PMParams& params, void* cudaStream)
         CUDA_CHECK(cudaMemcpyAsync(m_d_density_hat, d_deltaHat,
                                    (size_t)Ncomplex * sizeof(cufftComplex),
                                    cudaMemcpyDeviceToDevice, stream));
+        // T(k) already applied in the tilt above → pass a huge keq so the
+        // displacement operator contributes only i·k_d/k² (no extra transfer).
         cuda::launchDisplacementMultiply(
             static_cast<cufftComplex*>(m_d_density_hat),
-            N, Ncomplex, dk, L, dir, keq, stream);
+            N, Ncomplex, dk, L, dir, 1e30f, stream);
         CUFFT_CHECK(cufftExecC2R(m_planC2R,
                                  static_cast<cufftComplex*>(m_d_density_hat),
                                  static_cast<cufftReal*>(sBuf[dir])));
@@ -302,7 +311,8 @@ void PMCompute::generateCosmologicalIC(const PMParams& params, void* cudaStream)
         float OmegaMa = (params.OmegaM / (a * a * a))
                       / (params.OmegaM / (a * a * a) + OmegaL);
         float f = std::pow(OmegaMa, 0.55f);   // Linder growth-rate approximation
-        velFactor = a * Ha * f;
+        // Canonical momentum p = a²·ẋ, with growing-mode ẋ = f·H·D·Ψ.
+        velFactor = a * a * Ha * f;
     }
 
     // 8. Displace particles off their Lagrangian lattice and seed velocities.
@@ -378,9 +388,10 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
     int Ncomplex = N * N * (N / 2 + 1);
     float cellSize = params.boxSize / (float)N;
 
-    // Gaussian smoothing radius: 2x inter-particle spacing to suppress shot noise
-    // and prevent small-scale gravitational collapse
-    float smoothRadius = 2.0f * params.boxSize / std::cbrt((float)m_particleCount);
+    // Gaussian smoothing radius (forceSmoothing × inter-particle spacing): damps
+    // shot noise; lower values let small-scale structure (filaments/halos) sharpen.
+    float smoothRadius = params.forceSmoothing * params.boxSize
+                       / std::cbrt((float)m_particleCount);
 
     static constexpr float PI_F = 3.14159265358979323846f;
 
@@ -405,28 +416,26 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
                         (params.OmegaM / (a * a * a) + OmegaL);
             H_current = std::sqrt(std::max(H2, 0.0f));
 
-            // ── Peculiar velocity formulation: u = a·ẋ ──
-            //   Equation of motion: du/dt = -H·u - ∇φ
-            //   Poisson: ∇²φ = (3/2)H₀²Ω_m·δ/a
-            //   → G_eff = 3H₀²Ω_m / (8πρ̄·a)  (single 1/a factor)
-            //   Drift: dx = u·dt/a
-            //   Drag: dampFactor = 1 - H·dt  (Hubble friction)
+            // ── Symplectic comoving leapfrog (Quinn, Katz, Stadel & Lake 1997) ──
+            // Canonical momentum p = a²·ẋ makes the Hamiltonian separable, so the
+            // Hubble drag is absorbed into the variable change instead of an ad-hoc
+            // (1 − H·dt) factor — the integrator stays symplectic (no secular drift).
+            //   Poisson (peculiar potential): ∇²φ = (3/2)H₀²Ω_m·δ/a  ⇒ G_eff = G_cosmo/a
+            //   Kick : p += f·dt          (f = −∇φ, drag-free)
+            //   Drift: dx = p·dt/a²
             float L = params.boxSize;
             float rhoMean = (float)m_particleCount / (L * L * L);
             float G_cosmo = (3.0f * params.H0 * params.H0 * params.OmegaM)
                           / (8.0f * PI_F * rhoMean);
 
-            G_eff = G_cosmo / a;  // Single 1/a from Poisson equation
+            G_eff = G_cosmo / a;  // comoving Poisson 1/a stays in G_eff
 
-            // Hubble drag on peculiar velocity: du/dt includes -H·u
-            // Combined with pressure support / velocity dispersion (damping)
-            // dampFactor = (1 - H·dt) × exp(-γ·dt)
-            float hubbleDrag = std::max(0.0f, 1.0f - H_current * params.dt);
-            float pressureDamp = std::exp(-params.damping * params.dt);
-            dampFactor = hubbleDrag * pressureDamp;
+            // No Hubble drag in the kick (it lives in the p = a²ẋ variable).
+            // params.damping is kept only as an optional artificial pressure term.
+            dampFactor = std::exp(-params.damping * params.dt);
 
-            // Comoving drift: dx = u·dt/a  (u is peculiar velocity)
-            driftDt = params.dt / a;
+            // Canonical drift: dx = p·dt/a²
+            driftDt = params.dt / (a * a);
             halfDriftDt = driftDt * 0.5f;
         } else {
             G_eff = params.G;
@@ -457,9 +466,9 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
                                          static_cast<float*>(m_d_density),
                                          m_particleCount, N, params.boxSize,
                                          params.sinkDensityThreshold,
-                                         params.sinkRadius * cellSize,
+                                         MAX_SINKS,
+                                         static_cast<int*>(m_d_sinkList),
                                          static_cast<int*>(m_d_sinkCount),
-                                         static_cast<int*>(m_d_newParticleCount),
                                          stream);
         }
 
@@ -553,7 +562,8 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
         if (params.enableSink) {
             cuda::launchPMSinkAccretion(particles, m_particleCount,
                                          params.sinkRadius * cellSize,
-                                         params.boxSize,
+                                         params.boxSize, MAX_SINKS,
+                                         static_cast<int*>(m_d_sinkList),
                                          static_cast<int*>(m_d_sinkCount),
                                          static_cast<int*>(m_d_newParticleCount),
                                          stream);
@@ -575,10 +585,12 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
                                               stream);
         }
 
-        // ── 12. Evolve scale factor (Friedmann): da/dt = a·H(a) ──
-        if (params.comoving) {
+        // ── 12. Evolve scale factor (Friedmann): da/dt = a·H(a), capped at aMax ──
+        // Freezing expansion at aMax lets the seeded web finish collapsing and
+        // stay visible, instead of diluting away as a → ∞.
+        if (params.comoving && m_scaleFactor < params.aMax) {
             float da = m_scaleFactor * H_current * params.dt;
-            m_scaleFactor += da;
+            m_scaleFactor = std::min(m_scaleFactor + da, params.aMax);
         }
 
         m_state.time += params.dt;
@@ -680,6 +692,31 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
                 ? m_h_spectrum[i] / (float)m_h_counts[i]
                 : 0.0f;
         }
+    }
+
+    // ── Per-particle local overdensity → particle.density, for luminosity shading ──
+    // (m_d_forceX is free after the sub-step loop; reuse it as a density scratch grid.)
+    cuda::launchPMClearGrid(static_cast<float*>(m_d_forceX), N3, stream);
+    cuda::launchPMDeposit(particles, static_cast<float*>(m_d_forceX),
+                          m_particleCount, N, params.boxSize,
+                          params.openBoundary, stream);
+    {
+        float rhoMean = (float)m_particleCount
+                      / (params.boxSize * params.boxSize * params.boxSize);
+        cuda::launchPMStoreLuminosity(particles, static_cast<float*>(m_d_forceX),
+                                      m_particleCount, N, params.boxSize,
+                                      rhoMean, stream);
+    }
+
+    // ── Periodic diagnostic to stderr so structure growth shows in the run log ──
+    // As matter collapses into the cosmic web, KE rises and PE deepens (more
+    // negative); a/z track the expansion. No "[PM] step=" lines = sim is paused.
+    // (Energies carry ~1 frame latency from the async readback above.)
+    if (m_state.step % 400 == 0) {
+        fprintf(stderr, "[PM] step=%d a=%.3f z=%.2f KE=%.4g PE=%.4g E=%.4g |p|=%.3g\n",
+                m_state.step, m_state.scaleFactor, m_state.redshift,
+                m_state.kineticEnergy, m_state.potentialEnergy,
+                m_state.totalEnergy, m_state.momentumMag);
     }
 }
 

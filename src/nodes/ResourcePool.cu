@@ -67,6 +67,7 @@ void ResourcePool::allocateGridBuffers(int N) {
     CUDA_CHECK(cudaMalloc(&m_d_counts, m_nBins * sizeof(int)));
     CUDA_CHECK(cudaMalloc(&m_d_sinkCount, sizeof(int)));
     CUDA_CHECK(cudaMalloc(&m_d_newParticleCount, sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&m_d_sinkList, MAX_SINKS * sizeof(int)));
 
     fprintf(stderr, "[NodeGraph] Allocated grid buffers: N=%d\n", N);
 }
@@ -82,6 +83,7 @@ void ResourcePool::freeGridBuffers() {
     if (m_d_counts) { cudaFree(m_d_counts); m_d_counts = nullptr; }
     if (m_d_sinkCount) { cudaFree(m_d_sinkCount); m_d_sinkCount = nullptr; }
     if (m_d_newParticleCount) { cudaFree(m_d_newParticleCount); m_d_newParticleCount = nullptr; }
+    if (m_d_sinkList) { cudaFree(m_d_sinkList); m_d_sinkList = nullptr; }
     m_gridN = 0;
 }
 

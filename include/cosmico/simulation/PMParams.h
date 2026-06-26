@@ -17,15 +17,24 @@ struct PMParams {
     bool comoving = false;
     float H0 = 0.02f;                  // Hubble constant (simulation units)
     float OmegaM = 1.0f;               // Matter density parameter (EdS default)
-    float aInit = 0.5f;                // Initial scale factor (z_init = 1)
+    float aInit = 0.3f;                // Initial scale factor (z_init ≈ 2.3)
+    float aMax = 1.5f;                 // Freeze expansion past this a (lets the web finish collapsing)
 
     // Cosmological initial conditions (Zel'dovich 1LPT — used by the
     // "Cosmological" IC). A Gaussian random field with P(k) ∝ k^ns·T²(k)
     // displaces particles off a uniform lattice and seeds growing-mode
     // peculiar velocities, replacing the old white-noise jitter.
     float ns = 0.96f;                  // Primordial spectral index
-    float zeldovichAmplitude = 0.2f;   // Initial RMS displacement / mean particle spacing
+    float zeldovichAmplitude = 0.3f;   // Initial RMS displacement / mean particle spacing
     int   zeldovichSeed = 1234;        // Seed for the Gaussian random field
+    float forceSmoothing = 0.8f;       // PM force Gaussian smoothing, in mean particle spacings (lower = sharper web)
+
+    // Real CDM transfer function T(k) (BBKS 1986 + Sugiyama 1995 shape),
+    // replacing the toy Lorentzian. Needs a physical box size to map grid modes
+    // to physical wavenumbers k [h/Mpc]; Γ = Ωm·h·exp(−Ωb(1+√(2h)/Ωm)).
+    float omegaB = 0.048f;             // Baryon density parameter
+    float hubbleH = 0.68f;             // Dimensionless Hubble (H0 = 100h km/s/Mpc)
+    float boxSizeMpc = 200.0f;         // Physical comoving box size [Mpc/h]
 
     // Corrections
     bool correctMomentum = true;        // Subtract mean velocity each step

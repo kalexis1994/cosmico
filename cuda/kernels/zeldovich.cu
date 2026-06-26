@@ -26,8 +26,18 @@ void launchZeldovichWhiteNoise(float* grid, int N3, unsigned int seed,
 
 // ─── Spectral tilt: delta_hat *= |n|^(ns/2) (CDM power-law rise) ──────────
 
+// BBKS (Bardeen, Bond, Kaiser & Szalay 1986) CDM transfer function, q = k/Γ.
+__device__ inline float bbksTransfer(float q) {
+    if (q < 1e-6f) return 1.0f;
+    float t1 = logf(1.0f + 2.34f * q) / (2.34f * q);
+    float a = 16.1f * q, b = 5.46f * q, c = 6.71f * q;
+    float poly = 1.0f + 3.89f * q + a * a + b * b * b + c * c * c * c;
+    return t1 * powf(poly, -0.25f);
+}
+
 __global__ void zeldovichTiltKernel(cufftComplex* __restrict__ deltaHat,
-                                    int N, int Ncomplex, float ns) {
+                                    int N, int Ncomplex, float ns,
+                                    float kf, float gamma) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= Ncomplex) return;
 
@@ -47,18 +57,21 @@ __global__ void zeldovichTiltKernel(cufftComplex* __restrict__ deltaHat,
         return;
     }
 
-    // |n|^(ns/2) = (n²)^(ns/4); the transfer function T(k) is applied by
-    // launchDisplacementMultiply, so the product realises sqrt(P) = k^(ns/2)·T.
-    float scale = powf(n2, 0.25f * ns);
+    // sqrt(P(k)) = k^(ns/2)·T(k):  |n|^(ns/2) = (n²)^(ns/4), and a real CDM
+    // transfer function T(k) at physical k = kf·|n| [h/Mpc], q = k/Γ.
+    float nmag = sqrtf(n2);
+    float T = (kf > 0.0f && gamma > 0.0f) ? bbksTransfer(kf * nmag / gamma) : 1.0f;
+    float scale = powf(n2, 0.25f * ns) * T;
     deltaHat[idx].x *= scale;
     deltaHat[idx].y *= scale;
 }
 
 void launchZeldovichTilt(cufftComplex* deltaHat, int N, int Ncomplex,
-                         float ns, cudaStream_t stream) {
+                         float ns, float kf, float gamma, cudaStream_t stream) {
     int blockSize = 256;
     int numBlocks = (Ncomplex + blockSize - 1) / blockSize;
-    zeldovichTiltKernel<<<numBlocks, blockSize, 0, stream>>>(deltaHat, N, Ncomplex, ns);
+    zeldovichTiltKernel<<<numBlocks, blockSize, 0, stream>>>(
+        deltaHat, N, Ncomplex, ns, kf, gamma);
 }
 
 // ─── Apply the displacement field to particles (Zel'dovich seeding) ───────

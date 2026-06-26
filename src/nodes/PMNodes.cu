@@ -333,8 +333,9 @@ void SinkAccretionNode::execute(ResourcePool& pool, cudaStream_t stream) {
 
     cuda::launchPMSinkAccretion(particles, pool.particleCount(),
                                 sinkRadius * cellSize, boxSize,
-                                pool.sinkCount(), pool.newParticleCount(),
-                                stream);
+                                ResourcePool::MAX_SINKS,
+                                pool.sinkList(), pool.sinkCount(),
+                                pool.newParticleCount(), stream);
 }
 
 // ─── EnergyReduceNode ───────────────────────────────────────────────

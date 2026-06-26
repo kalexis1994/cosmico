@@ -85,18 +85,24 @@ void launchPMPowerSpectrum(const cufftComplex* density_hat, int gridN,
                            int Ncomplex, float* d_spectrum, int* d_counts,
                            int nBins, float dk, cudaStream_t stream);
 
-// 12. Sink formation: merge particles in high-density cells into sink particles
+// Per-particle local overdensity δ=ρ/ρ̄ → particle.density, for luminosity shading
+void launchPMStoreLuminosity(ParticleGpu* particles, const float* density,
+                             int particleCount, int gridN, float boxSize,
+                             float meanDensity, cudaStream_t stream);
+
+// 12. Sink formation: mark high-density cells as sinks, kept in a compact
+//     index list (d_sinkList, size d_sinkCount, capped at maxSinks).
 void launchPMSinkFormation(ParticleGpu* particles, const float* density,
                            int particleCount, int gridN, float boxSize,
-                           float threshold, float sinkRadius,
-                           int* d_sinkCount, int* d_newParticleCount,
+                           float threshold, int maxSinks,
+                           int* d_sinkList, int* d_sinkCount,
                            cudaStream_t stream);
 
-// 13. Sink accretion: absorb nearby particles into existing sinks
+// 13. Sink accretion: absorb nearby particles into the listed sinks (O(N·nSinks))
 void launchPMSinkAccretion(ParticleGpu* particles, int particleCount,
-                           float sinkRadius, float boxSize,
-                           int* d_sinkCount, int* d_newParticleCount,
-                           cudaStream_t stream);
+                           float sinkRadius, float boxSize, int maxSinks,
+                           int* d_sinkList, int* d_sinkCount,
+                           int* d_newParticleCount, cudaStream_t stream);
 
 // ─── Isolated (non-periodic) boundary condition helpers ──────────────
 

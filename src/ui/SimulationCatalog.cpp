@@ -160,8 +160,14 @@ void SimulationCatalog::scanFolder() {
             entry.pmDefaults.H0                 = p.value("H0", entry.pmDefaults.H0);
             entry.pmDefaults.OmegaM             = p.value("omegaM", entry.pmDefaults.OmegaM);
             entry.pmDefaults.aInit              = p.value("aInit", entry.pmDefaults.aInit);
+            entry.pmDefaults.aMax               = p.value("aMax", entry.pmDefaults.aMax);
             entry.pmDefaults.ns                 = p.value("ns", entry.pmDefaults.ns);
             entry.pmDefaults.zeldovichAmplitude = p.value("zeldovichAmplitude", entry.pmDefaults.zeldovichAmplitude);
+            entry.pmDefaults.forceSmoothing     = p.value("forceSmoothing", entry.pmDefaults.forceSmoothing);
+            entry.pmDefaults.damping            = p.value("damping", entry.pmDefaults.damping);
+            entry.pmDefaults.omegaB             = p.value("omegaB", entry.pmDefaults.omegaB);
+            entry.pmDefaults.hubbleH            = p.value("hubbleH", entry.pmDefaults.hubbleH);
+            entry.pmDefaults.boxSizeMpc         = p.value("boxSizeMpc", entry.pmDefaults.boxSizeMpc);
         }
 
         // Parse camera configuration
@@ -260,8 +266,14 @@ void SimulationCatalog::scanScenarios(SimulationEntry& entry, const std::string&
             sc.pmParams.H0                 = p.value("H0", sc.pmParams.H0);
             sc.pmParams.OmegaM             = p.value("omegaM", sc.pmParams.OmegaM);
             sc.pmParams.aInit              = p.value("aInit", sc.pmParams.aInit);
+            sc.pmParams.aMax               = p.value("aMax", sc.pmParams.aMax);
             sc.pmParams.ns                 = p.value("ns", sc.pmParams.ns);
             sc.pmParams.zeldovichAmplitude = p.value("zeldovichAmplitude", sc.pmParams.zeldovichAmplitude);
+            sc.pmParams.forceSmoothing     = p.value("forceSmoothing", sc.pmParams.forceSmoothing);
+            sc.pmParams.damping            = p.value("damping", sc.pmParams.damping);
+            sc.pmParams.omegaB             = p.value("omegaB", sc.pmParams.omegaB);
+            sc.pmParams.hubbleH            = p.value("hubbleH", sc.pmParams.hubbleH);
+            sc.pmParams.boxSizeMpc         = p.value("boxSizeMpc", sc.pmParams.boxSizeMpc);
         }
 
         auto previewPath = dirEntry.path() / "preview.png";

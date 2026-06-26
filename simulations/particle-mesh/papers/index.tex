@@ -118,9 +118,20 @@ into a density contrast with the matter power spectrum:
 P(k) \propto k^{n_s}\,T^2(k)
 \end{equation}
 
-where $n_s$ is the primordial spectral index and $T(k)$ a transfer function
-that turns the spectrum over near the equality scale $k_\text{eq}$, suppressing
-small-scale power. Each particle, initially on a uniform Lagrangian lattice at
+where $n_s$ is the primordial spectral index and $T(k)$ the CDM transfer
+function. We use the Bardeen, Bond, Kaiser \& Szalay (1986) form with the
+Sugiyama (1995) shape parameter $\Gamma = \Omega_m h\,e^{-\Omega_b(1+\sqrt{2h}/\Omega_m)}$,
+evaluated at physical wavenumber $k = (2\pi/L_\text{Mpc})\,|\mathbf{n}|$:
+
+\begin{equation}
+T(q) = \frac{\ln(1+2.34q)}{2.34q}\,\big[1 + 3.89q + (16.1q)^2 + (5.46q)^3 + (6.71q)^4\big]^{-1/4},
+\quad q = k/\Gamma
+\end{equation}
+
+This encodes the real early-universe physics --- the matter--radiation equality
+turnover and the $k^{-2}\ln^2 k$ small-scale suppression --- distilled, exactly
+as production pipelines feed a CAMB/CLASS transfer function into their initial
+conditions. Each particle, initially on a uniform Lagrangian lattice at
 position $\mathbf{q}$, is displaced by the Zel'dovich field:
 
 \begin{equation}

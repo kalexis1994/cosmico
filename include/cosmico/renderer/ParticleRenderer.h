@@ -17,7 +17,8 @@ struct ParticleRenderPushConstants {
     alignas(16) float camForward[4];  // 16B (xyz=fwd,   w=camPos.z)
     float simTime;                     // 4B  (cosmetic rotation)
     float showDarkMatter;              // 4B  (0.0 = hide, 1.0 = show type<0 particles)
-    float _pad1[2];                    // 8B  padding to 16-byte alignment
+    float lumStrength;                 // 4B  (0 = speed color, 1 = density luminosity)
+    float _pad1;                       // 4B  padding to 16-byte alignment
 };  // = 144 bytes total
 
 class ParticleRenderer {

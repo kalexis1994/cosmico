@@ -10,11 +10,18 @@
     "G": 1.0,
     "gridSize": 128,
     "boxSize": 100.0,
-    "stepsPerFrame": 10,
-    "omegaM": 0.3,
-    "aInit": 0.5,
+    "stepsPerFrame": 20,
+    "omegaM": 1.0,
+    "H0": 0.05,
+    "aInit": 0.3,
+    "aMax": 50.0,
     "ns": 0.96,
-    "zeldovichAmplitude": 0.2
+    "zeldovichAmplitude": 0.4,
+    "forceSmoothing": 0.8,
+    "damping": 0.0,
+    "omegaB": 0.048,
+    "hubbleH": 0.68,
+    "boxSizeMpc": 200.0
   },
   "camera": {
     "distance": 150.0,

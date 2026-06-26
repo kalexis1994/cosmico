@@ -17,7 +17,7 @@ void launchZeldovichWhiteNoise(float* grid, int N3, unsigned int seed,
 // function T(k) is applied later by launchDisplacementMultiply, so together
 // they realise sqrt(P(k)) = k^(ns/2)·T(k).
 void launchZeldovichTilt(cufftComplex* deltaHat, int N, int Ncomplex,
-                         float ns, cudaStream_t stream);
+                         float ns, float kf, float gamma, cudaStream_t stream);
 
 // Displace particles off their uniform Lagrangian lattice by the displacement
 // field (sx,sy,sz) sampled at each particle's lattice point q via CIC:

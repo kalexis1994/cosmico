@@ -5,6 +5,8 @@ layout(location = 1) in float inType;
 layout(location = 2) in float inVisualRadius;
 layout(location = 3) in vec3 inSphereWorldPos;
 layout(location = 4) in vec2 inUV;
+layout(location = 5) in float inLum;
+layout(location = 6) in float inMass;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 1, binding = 0) uniform sampler2DArray planetTex;
@@ -20,7 +22,19 @@ layout(push_constant) uniform PushConstants {
     vec4 camForward;  // xyz = fwd,   w = camPos.z
     float simTime;    // simulation time for cosmetic rotation
     float showDarkMatter;
+    float lumStrength; // 0 = legacy speed color, 1 = density-luminosity (PM)
 };
+
+// Blackbody-ish luminosity ramp: faint deep-red → orange → warm white → blue-white.
+vec3 blackbody(float t) {
+    vec3 c1 = vec3(0.40, 0.06, 0.02);
+    vec3 c2 = vec3(1.00, 0.45, 0.10);
+    vec3 c3 = vec3(1.00, 0.92, 0.65);
+    vec3 c4 = vec3(0.80, 0.88, 1.00);
+    if (t < 0.33) return mix(c1, c2, t / 0.33);
+    if (t < 0.66) return mix(c2, c3, (t - 0.33) / 0.33);
+    return mix(c3, c4, (t - 0.66) / 0.34);
+}
 
 // Visual rotation rates (real proportions scaled down ~50× for aesthetics)
 // Negative = retrograde rotation
@@ -214,18 +228,28 @@ void main() {
         gl_FragDepth = hitClip.z / hitClip.w;
 
     } else if (inType > 0.0) {
-        // Sink / black hole
+        // Sink / black hole — accreted mass shines bright (warm → blue-white)
         if (r2 > 1.0) discard;
         float falloff = 1.0 - sqrt(r2);
-        alpha = falloff * falloff * 2.0;
-        color = vec3(1.0, 1.0, 1.0);
+        float glow = clamp(log(max(inMass, 1.0)) * 0.25, 0.0, 1.0);
+        color = mix(vec3(1.0, 0.95, 0.8), vec3(0.75, 0.85, 1.0), glow);
+        alpha = falloff * falloff * (1.5 + 2.0 * glow);
         gl_FragDepth = 1.0;
     } else {
-        // Default: speed-based color
         if (r2 > 1.0) discard;
         float falloff = 1.0 - sqrt(r2);
-        alpha = falloff * falloff;
-        color = speedToColor(inSpeed);
+        if (lumStrength > 0.5) {
+            // Luminosity ∝ local overdensity: dense web (filaments/nodes) glows
+            // like stars/galaxies; diffuse void matter stays dim ("dark matter").
+            float t = clamp(log(1.0 + max(inLum, 0.0)) * 0.4, 0.0, 1.0);
+            color = blackbody(t);
+            float bright = mix(0.06, 1.6, t * t);
+            if (showDarkMatter > 0.5) bright = max(bright, 0.55);  // lift faint matter
+            alpha = falloff * falloff * bright;
+        } else {
+            color = speedToColor(inSpeed);
+            alpha = falloff * falloff;
+        }
         gl_FragDepth = 1.0;
     }
 

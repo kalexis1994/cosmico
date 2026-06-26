@@ -25,6 +25,8 @@ public:
     int* powerSpectrumCounts() const { return m_d_counts; }
     int* sinkCount() const { return m_d_sinkCount; }
     int* newParticleCount() const { return m_d_newParticleCount; }
+    int* sinkList() const { return m_d_sinkList; }
+    static constexpr int MAX_SINKS = 256;
 
     // Params passthrough
     void setParams(const PMParams& p) { m_params = p; }
@@ -65,6 +67,7 @@ private:
     int* m_d_counts = nullptr;
     int* m_d_sinkCount = nullptr;
     int* m_d_newParticleCount = nullptr;
+    int* m_d_sinkList = nullptr;
 
     cufftHandle m_planR2C = 0;
     cufftHandle m_planC2R = 0;
