@@ -53,34 +53,37 @@ vec3 cmbColormap(float t) {
 }
 
 void main() {
-    // Reconstruct world-space ray from screen UV via inverse view-projection
-    vec4 nearNDC = vec4(inUV * 2.0 - 1.0, 0.0, 1.0);
-    vec4 farNDC  = vec4(inUV * 2.0 - 1.0, 1.0, 1.0);
-
-    vec4 nearWorld = invViewProj * nearNDC;
-    vec4 farWorld  = invViewProj * farNDC;
-    nearWorld /= nearWorld.w;
-    farWorld  /= farWorld.w;
-
+    // Reconstruct the world-space view ray (camera -> far point). A single far
+    // reconstruction avoids a near-zero (far - near) that could normalize to NaN.
+    vec4 farWorld = invViewProj * vec4(inUV * 2.0 - 1.0, 1.0, 1.0);
     vec3 ro = cameraPos.xyz;
-    vec3 rd = normalize(farWorld.xyz - nearWorld.xyz);
+    vec3 rd = normalize(farWorld.xyz / farWorld.w - ro);
 
     vec3 center = sphereCenter.xyz;
     float radius = sphereCenter.w;
 
-    // Ray-sphere intersection
-    float tNear, tFar;
-    if (!intersectSphere(ro, rd, center, radius, tNear, tFar)) {
-        outColor = vec4(0.0);
-        return;
+    vec3 normal;
+    vec3 oc = ro - center;
+    if (dot(oc, oc) < radius * radius * 1e-4) {
+        // Immersive skybox: the camera sits at the sphere centre, so the sky is
+        // sampled directly by the ray direction — no intersection (no black-on-miss).
+        normal = rd;
+    } else {
+        // Ball view: ray-sphere intersection (nearest hit outside, farthest inside).
+        float tNear, tFar;
+        if (!intersectSphere(ro, rd, center, radius, tNear, tFar)) {
+            outColor = vec4(0.0);
+            return;
+        }
+        float tHit = (tNear > 0.0) ? tNear : tFar;
+        normal = normalize(ro + rd * tHit - center);
     }
 
-    // Choose hit point: if camera is outside sphere, use nearest hit;
-    // if inside, use farthest hit (see interior)
-    float tHit = (tNear > 0.0) ? tNear : tFar;
-
-    vec3 hitPos = ro + rd * tHit;
-    vec3 normal = normalize(hitPos - center);
+    // Guard against a degenerate ray (NaN/zero): show neutral, never a black hole.
+    if (!(dot(normal, normal) > 0.5)) {
+        outColor = vec4(0.40, 0.40, 0.45, opacity);
+        return;
+    }
 
     // Spherical coordinates for equirectangular UV. Pole on the +Y (world up)
     // axis so the horizon (theta = 90 deg) is the horizontal plane the camera
