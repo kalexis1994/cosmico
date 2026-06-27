@@ -20,13 +20,14 @@ struct InflationParams {
     float lambda4 = 1e-12f;             // Starobinsky: Lambda^4
     float mu = 15.0f;                   // Hilltop: mu scale
 
-    // Volume rendering
-    bool showVolume = true;
+    // Volume rendering (off by default: the inflaton box otherwise occludes the
+    // CMB sphere and is the heavy per-frame cost).
+    bool showVolume = false;
     float volumeOpacity = 3.0f;
     int volumeSteps = 128;
 
-    // CMB rendering
-    bool showCMB = false;
+    // CMB rendering (on by default — the headline of this backend)
+    bool showCMB = true;
     float cmbRadius = 0.2f;            // Shell radius as fraction of box (0.05-0.5)
     float cmbContrast = 1.0f;          // Visual contrast amplification (0.1-10.0)
     float cmbOpacity = 0.85f;          // Sphere opacity (0.0-1.0)
