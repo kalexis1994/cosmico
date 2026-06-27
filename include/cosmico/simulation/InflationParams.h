@@ -30,6 +30,11 @@ struct InflationParams {
     float cmbRadius = 0.2f;            // Shell radius as fraction of box (0.05-0.5)
     float cmbContrast = 1.0f;          // Visual contrast amplification (0.1-10.0)
     float cmbOpacity = 0.85f;          // Sphere opacity (0.0-1.0)
+    // Rigorous CMB: synthesize the map from a ΛCDM C_ℓ with acoustic peaks
+    // (Gaussian a_ℓm field) instead of slicing the inflaton field. cmbSeed bumps
+    // to request a fresh realisation.
+    bool rigorousCMB = true;
+    unsigned cmbSeed = 1;
 
     // Zel'dovich structure formation
     float zeldovichSpeed = 0.02f;      // Growth factor increment per sub-step

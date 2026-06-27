@@ -133,6 +133,7 @@ private:
     bool m_expAnchored = false;
     float m_savedFov = 0.0f;  // FOV stashed while the anchored view uses FOV-zoom
     float m_prevCoordScale = 1.0f;  // last frame's expansion scale (free-cam ride)
+    unsigned m_cmbSynthSeed = 0;    // seed of the cached rigorous-CMB map (0 = none)
 };
 
 } // namespace cosmico

@@ -17,6 +17,7 @@
 #include <cosmico/simulation/InitialConditions.h>
 #include <cosmico/simulation/ParticleSystem.h>
 #include <cosmico/simulation/InflationCompute.h>
+#include <cosmico/simulation/CMBSynthesis.h>
 #include <cosmico/simulation/CDT2DCompute.h>
 #include <cosmico/simulation/CDT3DCompute.h>
 #include <cosmico/ui/DebugUI.h>
@@ -402,7 +403,18 @@ void Application::mainLoop() {
             }
             bool cmbReady = false;
             if (usingInflation && !zeldovichMode && m_simulation->inflationParams().showCMB) {
-                m_simulation->extractCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H);
+                const auto& ip = m_simulation->inflationParams();
+                if (ip.rigorousCMB) {
+                    // Rigorous CMB: Gaussian a_ℓm field from a ΛCDM C_ℓ. One-shot,
+                    // cached; re-synthesize only when the seed changes.
+                    if (m_cmbSynthSeed != ip.cmbSeed) {
+                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 500, ip.cmbSeed);
+                        m_cmbSynthSeed = ip.cmbSeed;
+                    }
+                } else {
+                    m_simulation->extractCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H);
+                    m_cmbSynthSeed = 0;  // force re-synth if switched back to rigorous
+                }
                 cmbReady = true;
             }
 

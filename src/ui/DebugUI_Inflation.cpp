@@ -102,6 +102,14 @@ void DebugUI::renderInflation(InflationParams& params, float fps, bool& paused,
         ImGui::SliderFloat("CMB Contrast", &params.cmbContrast, 0.1f, 10.0f, "%.2f",
                            ImGuiSliderFlags_Logarithmic);
         ImGui::SliderFloat("CMB Opacity", &params.cmbOpacity, 0.0f, 1.0f, "%.2f");
+        ImGui::Checkbox("Rigorous CMB (acoustic peaks)", &params.rigorousCMB);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Gaussian a_lm field from a LCDM C_l (real CMB statistics)\n"
+                              "instead of a slice of the inflaton field");
+        if (params.rigorousCMB) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Regenerate")) params.cmbSeed++;
+        }
     }
     ImGui::Separator();
 
