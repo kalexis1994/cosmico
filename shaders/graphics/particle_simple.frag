@@ -18,6 +18,9 @@ layout(push_constant) uniform PushConstants {
     vec4 camForward;  // xyz = fwd,   w = camPos.z
     float simTime;
     float showDarkMatter;
+    float lumStrength;  // (unused here; keeps the push block aligned with the struct)
+    float coordScale;   // (vertex stage only)
+    float exposure;     // camera "exposure": brightness multiplier
 };
 
 vec3 speedToColor(float speed) {
@@ -74,5 +77,6 @@ void main() {
     if (alpha < 0.01) discard;
 
     // No gl_FragDepth write — uses interpolated depth, enabling early-Z
-    outColor = vec4(color * alpha, alpha);
+    // Camera exposure: scale emitted light (premultiplied RGB), keep coverage.
+    outColor = vec4(color * alpha * exposure, alpha);
 }
