@@ -114,7 +114,7 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
             reveal = t * t * (3.0f - 2.0f * t);
         }
         cpc.padding[0] = reveal;
-        cpc.padding[1] = 0.0f;
+        cpc.padding[1] = iparams.cmbGrid ? 1.0f : 0.0f;  // celestial alt-az grid
         m_cmbRenderer->draw(cmd, cpc);
     }
 

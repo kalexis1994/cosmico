@@ -9,6 +9,7 @@ layout(push_constant) uniform PC {
     float contrastScale;
     float opacity;
     float reveal;   // 0 = opaque uniform plasma glow, 1 = full CMB pattern
+    float showGrid; // >0.5 = overlay the celestial alt-az grid
 };
 
 layout(location = 0) in vec2 inUV;
@@ -104,6 +105,23 @@ void main() {
     // hot plasma; the anisotropy pattern resolves as 'reveal' goes 0 -> 1.
     vec3 plasma = vec3(0.95, 0.35, 0.12);
     color = mix(plasma, color, reveal);
+
+    // Celestial alt-az grid: parallels of altitude (constant theta) + meridians
+    // of azimuth (constant phi), 30 deg spacing, horizon emphasised. Meridian
+    // width scaled by 1/sin(theta) so lines stay ~constant width toward the poles.
+    if (showGrid > 0.5) {
+        const float PI = 3.14159265;
+        float s = PI / 6.0;          // 30 deg
+        float lw = 0.006;            // line half-width (rad)
+        float dTheta = abs(theta - floor(theta / s + 0.5) * s);
+        float par = 1.0 - smoothstep(0.0, lw, dTheta);
+        float dPhi = abs(phi_angle - floor(phi_angle / s + 0.5) * s);
+        float merW = lw / max(sin(theta), 0.15);
+        float mer = 1.0 - smoothstep(0.0, merW, dPhi);
+        float horiz = 1.0 - smoothstep(0.0, lw * 1.6, abs(theta - PI * 0.5));
+        vec3 gridCol = mix(vec3(0.55, 0.85, 1.0), vec3(1.0, 0.85, 0.4), horiz);
+        color = mix(color, gridCol, max(max(par, mer), horiz) * 0.5);
+    }
 
     // Subtle lighting for 3D depth perception
     // Light from camera direction for rim-like effect

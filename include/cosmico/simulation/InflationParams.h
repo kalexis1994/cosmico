@@ -51,6 +51,9 @@ struct InflationParams {
     bool cmbCoupleNs = true;
     float cmbTiltExaggerate = 8.0f;
     unsigned cmbResync = 0;
+    // Celestial alt-az grid overlaid on the CMB sphere (meridians of azimuth +
+    // parallels of altitude, horizon highlighted) to help orient while looking.
+    bool cmbGrid = false;
 
     // Zel'dovich structure formation
     float zeldovichSpeed = 0.02f;      // Growth factor increment per sub-step

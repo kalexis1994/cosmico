@@ -107,6 +107,10 @@ void DebugUI::renderInflation(InflationParams& params, float fps, bool& paused,
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Centre the CMB sphere on the camera so it surrounds you\n"
                               "in every direction (fly in with Tab). Off = ball at the origin.");
+        ImGui::Checkbox("Celestial grid (alt-az)", &params.cmbGrid);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Overlay azimuth/altitude grid lines (30 deg) with the\n"
+                              "horizon highlighted, to help orient while looking around.");
         ImGui::Checkbox("Rigorous CMB (acoustic peaks)", &params.rigorousCMB);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Gaussian a_lm field from a LCDM C_l (real CMB statistics)\n"
