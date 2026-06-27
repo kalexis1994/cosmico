@@ -82,17 +82,27 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
     bool cmbReady = usingInflation && !zeldovichMode && m_simulation->inflationParams().showCMB;
     if (cmbReady && m_cmbRenderer && m_cmbRenderer->isReady()) {
         const auto& iparams = m_simulation->inflationParams();
-        float sphereRadius = iparams.cmbRadius * iparams.boxSize * visualScale;
         CMBRenderPushConstants cpc{};
         memcpy(cpc.invViewProj, glm::value_ptr(invViewProj), sizeof(float) * 16);
         cpc.cameraPos[0] = camPos.x;
         cpc.cameraPos[1] = camPos.y;
         cpc.cameraPos[2] = camPos.z;
         cpc.cameraPos[3] = 0.0f;
-        cpc.sphereCenter[0] = 0.0f;
-        cpc.sphereCenter[1] = 0.0f;
-        cpc.sphereCenter[2] = 0.0f;
-        cpc.sphereCenter[3] = sphereRadius;
+        if (iparams.cmbImmersive) {
+            // Immersive sky: centre the last-scattering sphere on the camera so
+            // it surrounds the observer in every direction (a CMB skybox that
+            // travels with you), as the CMB is actually seen.
+            cpc.sphereCenter[0] = camPos.x;
+            cpc.sphereCenter[1] = camPos.y;
+            cpc.sphereCenter[2] = camPos.z;
+            cpc.sphereCenter[3] = m_camera->farPlane * 0.9f;
+        } else {
+            // Object view: a ball at the origin, looked at from outside.
+            cpc.sphereCenter[0] = 0.0f;
+            cpc.sphereCenter[1] = 0.0f;
+            cpc.sphereCenter[2] = 0.0f;
+            cpc.sphereCenter[3] = iparams.cmbRadius * iparams.boxSize * visualScale;
+        }
         cpc.contrastScale = iparams.cmbContrast;
         cpc.opacity = iparams.cmbOpacity;
         cpc.padding[0] = 0.0f;

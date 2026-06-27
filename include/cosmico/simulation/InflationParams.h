@@ -35,6 +35,10 @@ struct InflationParams {
     // to request a fresh realisation.
     bool rigorousCMB = true;
     unsigned cmbSeed = 1;
+    // Immersive sky: centre the last-scattering sphere on the camera so it
+    // surrounds the observer (a CMB skybox), as we actually see it. Off = a
+    // small ball at the origin viewed from outside.
+    bool cmbImmersive = true;
 
     // Zel'dovich structure formation
     float zeldovichSpeed = 0.02f;      // Growth factor increment per sub-step
