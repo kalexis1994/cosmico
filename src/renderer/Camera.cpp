@@ -195,13 +195,19 @@ glm::vec3 Camera::forward() const {
 }
 
 glm::mat4 Camera::viewMatrix() const {
+    // Pick an up vector not parallel to the view direction, so looking at the
+    // zenith/nadir doesn't degenerate lookAt into a NaN (black-screen) matrix.
     if (m_mode == CameraMode::Free) {
         glm::vec3 dir(std::sin(m_freeYaw) * std::cos(m_freePitch),
                       std::sin(m_freePitch),
                       std::cos(m_freeYaw) * std::cos(m_freePitch));
-        return glm::lookAt(m_freePos, m_freePos + dir, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 up = (std::abs(dir.y) > 0.999f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+        return glm::lookAt(m_freePos, m_freePos + dir, up);
     }
-    return glm::lookAt(position(), m_target, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3 pos = position();
+    glm::vec3 fwd = glm::normalize(m_target - pos);
+    glm::vec3 up = (std::abs(fwd.y) > 0.999f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    return glm::lookAt(pos, m_target, up);
 }
 
 glm::mat4 Camera::projectionMatrix(float aspect) const {

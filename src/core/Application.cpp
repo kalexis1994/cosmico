@@ -180,15 +180,26 @@ void Application::mainLoop() {
             }
         }
 
-        // Recombination clock: advance cosmic age toward recombination
-        // (~380,000 yr) over ~7 s, then stop — the CMB snapshot is "taken".
-        // Respects pause: it only advances while the sim is running.
-        if (m_simulation && !m_paused && m_simulation->backend() == ComputeBackend::Inflation) {
+        // Recombination clock: advance cosmic age toward recombination (~380,000
+        // yr) over ~7 s while running, then freeze the sim — the CMB snapshot is
+        // "taken" and the heavy inflaton compute stops (recovers FPS). Replay
+        // (age reset to 0) resumes. Respects manual pause.
+        if (m_simulation && m_simulation->backend() == ComputeBackend::Inflation) {
             auto& ip = m_simulation->inflationParams();
             const float tRec = 380000.0f;
-            if (ip.showCMB && ip.cmbTimeline && ip.cmbAgeYears < tRec) {
-                ip.cmbAgeYears += (tRec / 7.0f) * dt;
-                if (ip.cmbAgeYears > tRec) ip.cmbAgeYears = tRec;
+            if (ip.showCMB && ip.cmbTimeline) {
+                if (ip.cmbAgeYears < tRec && m_cmbAutoPaused) {  // Replay -> resume
+                    m_paused = false;
+                    m_cmbAutoPaused = false;
+                }
+                if (!m_paused && ip.cmbAgeYears < tRec) {
+                    ip.cmbAgeYears += (tRec / 7.0f) * dt;
+                    if (ip.cmbAgeYears >= tRec) {
+                        ip.cmbAgeYears = tRec;
+                        m_paused = true;          // snapshot taken: freeze
+                        m_cmbAutoPaused = true;
+                    }
+                }
             }
         }
 

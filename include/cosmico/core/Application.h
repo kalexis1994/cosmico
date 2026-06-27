@@ -135,6 +135,7 @@ private:
     float m_prevCoordScale = 1.0f;  // last frame's expansion scale (free-cam ride)
     unsigned m_cmbSynthSeed = 0;    // seed of the cached rigorous-CMB map (0 = none)
     unsigned m_cmbSynthResync = 0;  // last resync counter applied (tilt/coupling)
+    bool m_cmbAutoPaused = false;   // sim auto-paused when the CMB snapshot was taken
 };
 
 } // namespace cosmico
