@@ -180,6 +180,17 @@ void Application::mainLoop() {
             }
         }
 
+        // Recombination clock: advance cosmic age toward recombination
+        // (~380,000 yr) over ~7 s, then stop — the CMB snapshot is "taken".
+        if (m_simulation && m_simulation->backend() == ComputeBackend::Inflation) {
+            auto& ip = m_simulation->inflationParams();
+            const float tRec = 380000.0f;
+            if (ip.showCMB && ip.cmbTimeline && ip.cmbAgeYears < tRec) {
+                ip.cmbAgeYears += (tRec / 7.0f) * dt;
+                if (ip.cmbAgeYears > tRec) ip.cmbAgeYears = tRec;
+            }
+        }
+
         // Tab toggles free camera; click exits free camera
         if (m_appState == AppState::Running) {
             bool isFree = (m_camera->mode() == CameraMode::Free);

@@ -4,6 +4,7 @@
 #include <imgui.h>
 #include <vector>
 #include <cmath>
+#include <cstdio>
 
 namespace cosmico {
 
@@ -113,6 +114,20 @@ void DebugUI::renderInflation(InflationParams& params, float fps, bool& paused,
         if (params.rigorousCMB) {
             ImGui::SameLine();
             if (ImGui::SmallButton("Regenerate")) params.cmbSeed++;
+        }
+        ImGui::Checkbox("Recombination timeline", &params.cmbTimeline);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Cosmic clock from the Big Bang to recombination.\n"
+                              "Immersed in the opaque plasma glow until the CMB\n"
+                              "snapshot is taken at ~380,000 yr, then it stops.");
+        if (params.cmbTimeline) {
+            float p = params.cmbAgeYears / 380000.0f;
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%.0f / 380,000 yr (recombination)", params.cmbAgeYears);
+            ImGui::ProgressBar(p, ImVec2(-1.0f, 0.0f), buf);
+            if (params.cmbAgeYears >= 380000.0f)
+                ImGui::TextDisabled("Recombination reached - CMB snapshot taken");
+            if (ImGui::SmallButton("Replay")) params.cmbAgeYears = 0.0f;
         }
     }
     ImGui::Separator();

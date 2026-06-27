@@ -39,6 +39,12 @@ struct InflationParams {
     // surrounds the observer (a CMB skybox), as we actually see it. Off = a
     // small ball at the origin viewed from outside.
     bool cmbImmersive = true;
+    // Recombination timeline: a cosmic clock that advances from the Big Bang to
+    // recombination (~380,000 yr). While it runs you're immersed in the opaque
+    // plasma glow; at the target the CMB pattern resolves ("snapshot taken") and
+    // it stops. cmbAgeYears is advanced by the app each frame.
+    bool cmbTimeline = true;
+    float cmbAgeYears = 0.0f;
 
     // Zel'dovich structure formation
     float zeldovichSpeed = 0.02f;      // Growth factor increment per sub-step

@@ -8,6 +8,7 @@ layout(push_constant) uniform PC {
     vec4 sphereCenter; // xyz = center, w = radius
     float contrastScale;
     float opacity;
+    float reveal;   // 0 = opaque uniform plasma glow, 1 = full CMB pattern
 };
 
 layout(location = 0) in vec2 inUV;
@@ -98,6 +99,11 @@ void main() {
 
     // Map to CMB colormap
     vec3 color = cmbColormap(adjusted);
+
+    // Recombination: before the snapshot the universe is an opaque, near-uniform
+    // hot plasma; the anisotropy pattern resolves as 'reveal' goes 0 -> 1.
+    vec3 plasma = vec3(0.95, 0.35, 0.12);
+    color = mix(plasma, color, reveal);
 
     // Subtle lighting for 3D depth perception
     // Light from camera direction for rim-like effect

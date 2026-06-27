@@ -105,7 +105,15 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
         }
         cpc.contrastScale = iparams.cmbContrast;
         cpc.opacity = iparams.cmbOpacity;
-        cpc.padding[0] = 0.0f;
+        // Recombination reveal: 0 = opaque uniform plasma glow, 1 = full CMB
+        // pattern. The pattern resolves over the last fifth of the timeline.
+        float reveal = 1.0f;
+        if (iparams.cmbTimeline) {
+            float t = (iparams.cmbAgeYears / 380000.0f - 0.8f) / 0.2f;
+            t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+            reveal = t * t * (3.0f - 2.0f * t);
+        }
+        cpc.padding[0] = reveal;
         cpc.padding[1] = 0.0f;
         m_cmbRenderer->draw(cmd, cpc);
     }
