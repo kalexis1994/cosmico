@@ -51,6 +51,10 @@ struct PMParams {
     // origin so the box visibly inflates and structure recedes ("physical"
     // coordinates). When false, render the comoving frame (expansion hidden).
     bool physicalView = false;
+
+    // Camera "exposure": multiplies particle brightness on output. Lifts faint
+    // diffuse structure (and the dispersed physical-view web) out of the dark.
+    float renderExposure = 1.0f;
 };
 
 } // namespace cosmico

@@ -23,6 +23,8 @@ layout(push_constant) uniform PushConstants {
     float simTime;    // simulation time for cosmetic rotation
     float showDarkMatter;
     float lumStrength; // 0 = legacy speed color, 1 = density-luminosity (PM)
+    float coordScale;  // (vertex-stage only; declared here to keep the block aligned)
+    float exposure;    // camera "exposure": brightness multiplier on the output
 };
 
 // Blackbody-ish luminosity ramp: faint deep-red → orange → warm white → blue-white.
@@ -253,5 +255,6 @@ void main() {
         gl_FragDepth = 1.0;
     }
 
-    outColor = vec4(color * alpha, alpha);
+    // Camera exposure: scale emitted light (premultiplied RGB), keep coverage.
+    outColor = vec4(color * alpha * exposure, alpha);
 }

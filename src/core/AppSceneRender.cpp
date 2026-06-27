@@ -171,6 +171,8 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
             }
         }
         pc.coordScale = coordScale;
+        pc.exposure = (m_simulation->backend() == ComputeBackend::PM)
+                    ? m_simulation->pmParams().renderExposure : 1.0f;
 
         VkDescriptorSet texSet = m_planetTextures
             ? m_planetTextures->descriptorSet() : VK_NULL_HANDLE;

@@ -23,6 +23,7 @@ layout(push_constant) uniform PushConstants {
     float showDarkMatter;
     float lumStrength;
     float coordScale;  // 1 = comoving frame; a/aInit = physical (box inflates)
+    float exposure;    // brightness multiplier (unused in vertex stage)
 };
 
 layout(location = 0) out float outSpeed;

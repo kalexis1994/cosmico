@@ -210,6 +210,8 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
                 else            ImGui::TextDisabled("(x%.1f)", raw);
             }
         }
+        ImGui::SliderFloat("Exposure", &params.renderExposure, 0.25f, 16.0f,
+                           "%.2fx", ImGuiSliderFlags_Logarithmic);
         ImGui::Separator();
 
         ImGui::Text("Energy");
