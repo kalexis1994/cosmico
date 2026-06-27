@@ -89,8 +89,8 @@ void Camera::updateOrbit(const Input& input, float /*dt*/, float viewportHeight,
     glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
     glm::vec3 up = glm::cross(right, forward);
 
-    // Pan with middle mouse button
-    if (input.isMouseButtonDown(GLFW_MOUSE_BUTTON_MIDDLE)) {
+    // Pan with middle mouse button (disabled when translation is locked)
+    if (!lockTranslate && input.isMouseButtonDown(GLFW_MOUSE_BUTTON_MIDDLE)) {
         float worldPerPixel;
         if (viewportHeight > 0.0f) {
             if (orthographic)

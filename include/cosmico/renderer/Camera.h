@@ -34,6 +34,9 @@ public:
     // instead of the dolly distance — used by the anchored expansion view,
     // where the camera must stay fixed in space.
     bool fovZoom = false;
+    // When true, panning is disabled too: the camera can only rotate in place
+    // (planetarium view for the immersive CMB — you can't move, only look).
+    bool lockTranslate = false;
 
     CameraMode mode() const { return m_mode; }
 

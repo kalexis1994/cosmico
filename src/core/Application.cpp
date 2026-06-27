@@ -156,18 +156,25 @@ void Application::mainLoop() {
                     cursorX = static_cast<float>(m_input->mouseX()) - vpW * 0.5f;
                     cursorY = static_cast<float>(m_input->mouseY()) - vpH * 0.5f;
                 }
-                // Anchored expansion view: the camera is pinned in space, so the
-                // wheel does a field-of-view zoom. Stash/restore the FOV across
-                // the mode switch.
-                bool fovZoom = m_simulation
-                    && m_simulation->backend() == ComputeBackend::PM
-                    && m_simulation->pmParams().physicalView
-                    && !m_simulation->pmParams().isotropicExpansion;
+                // Pinned-camera views: the wheel does a field-of-view zoom and
+                // right-drag rotates in place. PM anchored view still allows pan;
+                // the immersive CMB locks translation entirely (planetarium).
+                bool fovZoom = false, cmbView = false;
+                if (m_simulation) {
+                    bool pmAnchored = m_simulation->backend() == ComputeBackend::PM
+                        && m_simulation->pmParams().physicalView
+                        && !m_simulation->pmParams().isotropicExpansion;
+                    cmbView = m_simulation->backend() == ComputeBackend::Inflation
+                        && m_simulation->inflationParams().showCMB
+                        && m_simulation->inflationParams().cmbImmersive;
+                    fovZoom = pmAnchored || cmbView;
+                }
                 if (fovZoom && !m_camera->fovZoom)
                     m_savedFov = m_camera->fovDegrees;
                 else if (!fovZoom && m_camera->fovZoom && m_savedFov > 0.0f)
                     m_camera->fovDegrees = m_savedFov;
                 m_camera->fovZoom = fovZoom;
+                m_camera->lockTranslate = cmbView;  // CMB: rotate in place, no moving
 
                 m_camera->update(*m_input, dt, vpH, cursorX, cursorY);
             }
