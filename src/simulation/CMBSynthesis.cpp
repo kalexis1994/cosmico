@@ -36,8 +36,9 @@ double Cl(int ell) {
 
 } // namespace
 
-void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed) {
-    fprintf(stderr, "[CMB] synthesizing %dx%d map, lMax=%d, seed=%u ...\n", W, H, lMax, seed);
+void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed, double deltaNs) {
+    fprintf(stderr, "[CMB] synthesizing %dx%d map, lMax=%d, seed=%u, dNs=%+.3f ...\n",
+            W, H, lMax, seed, deltaNs);
 
     auto idx = [](int l, int m) { return (size_t)l * (l + 1) / 2 + m; };
     const size_t ncoef = (size_t)(lMax + 1) * (lMax + 2) / 2;
@@ -47,7 +48,9 @@ void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed) {
     std::normal_distribution<double> N01(0.0, 1.0);
     std::vector<double> cc(ncoef, 0.0), cs(ncoef, 0.0);
     for (int l = 2; l <= lMax; ++l) {
-        double sig = std::sqrt(Cl(l));
+        // Re-tilt the primordial spectrum by deltaNs about ℓ=200 (the inflaton's
+        // n_s sets the slope; the baked transfer keeps the acoustic peaks).
+        double sig = std::sqrt(Cl(l) * std::pow((double)l / 200.0, deltaNs));
         for (int m = 0; m <= l; ++m) {
             cc[idx(l, m)] = sig * N01(rng);
             cs[idx(l, m)] = (m == 0) ? 0.0 : sig * N01(rng);

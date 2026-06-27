@@ -114,6 +114,18 @@ void DebugUI::renderInflation(InflationParams& params, float fps, bool& paused,
         if (params.rigorousCMB) {
             ImGui::SameLine();
             if (ImGui::SmallButton("Regenerate")) params.cmbSeed++;
+            if (ImGui::Checkbox("Couple to inflaton n_s (re-tilt)", &params.cmbCoupleNs))
+                params.cmbResync++;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Tilt the CMB spectrum by the inflaton's measured n_s.\n"
+                                  "Change the inflaton model and the CMB visibly re-tilts.");
+            if (params.cmbCoupleNs) {
+                ImGui::SliderFloat("Tilt exaggeration", &params.cmbTiltExaggerate, 1.0f, 25.0f, "%.0fx");
+                if (ImGui::IsItemDeactivatedAfterEdit()) params.cmbResync++;
+                if (state)
+                    ImGui::Text("  inflaton n_s = %.3f  (dNs = %+.3f)", state->spectralIndex,
+                                (state->spectralIndex - 0.96f) * params.cmbTiltExaggerate);
+            }
         }
         ImGui::Checkbox("Recombination timeline", &params.cmbTimeline);
         if (ImGui::IsItemHovered())

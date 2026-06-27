@@ -425,10 +425,18 @@ void Application::mainLoop() {
                 const auto& ip = m_simulation->inflationParams();
                 if (ip.rigorousCMB) {
                     // Rigorous CMB: Gaussian a_ℓm field from a ΛCDM C_ℓ. One-shot,
-                    // cached; re-synthesize only when the seed changes.
-                    if (m_cmbSynthSeed != ip.cmbSeed) {
-                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 900, ip.cmbSeed);
+                    // cached; re-synthesize on seed change or a resync request.
+                    if (m_cmbSynthSeed != ip.cmbSeed || m_cmbSynthResync != ip.cmbResync) {
+                        // Couple to the inflaton: tilt the spectrum by its measured
+                        // n_s (guarded to a sane range) times the exaggeration.
+                        const InflationStateData* ist = m_simulation->inflationState();
+                        float ns = (ist && ist->spectralIndex > 0.8f && ist->spectralIndex < 1.2f)
+                                 ? ist->spectralIndex : 0.96f;
+                        double deltaNs = ip.cmbCoupleNs
+                                       ? (double)(ns - 0.96f) * ip.cmbTiltExaggerate : 0.0;
+                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 900, ip.cmbSeed, deltaNs);
                         m_cmbSynthSeed = ip.cmbSeed;
+                        m_cmbSynthResync = ip.cmbResync;
                     }
                 } else {
                     m_simulation->extractCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H);

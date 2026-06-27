@@ -45,6 +45,12 @@ struct InflationParams {
     // it stops. cmbAgeYears is advanced by the app each frame.
     bool cmbTimeline = true;
     float cmbAgeYears = 0.0f;
+    // Couple the CMB to the inflaton: re-tilt C_ℓ by (n_s − 0.96)·exaggeration,
+    // so changing the inflaton model visibly re-tilts the CMB. cmbResync bumps
+    // to request a re-synthesis (toggle/exaggeration change) keeping the seed.
+    bool cmbCoupleNs = true;
+    float cmbTiltExaggerate = 8.0f;
+    unsigned cmbResync = 0;
 
     // Zel'dovich structure formation
     float zeldovichSpeed = 0.02f;      // Growth factor increment per sub-step
