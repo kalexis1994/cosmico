@@ -113,16 +113,18 @@ void main() {
     // width scaled by 1/sin(theta) so lines stay ~constant width toward the poles.
     if (showGrid > 0.5) {
         const float PI = 3.14159265;
-        float s = PI / 6.0;          // 30 deg
-        float lw = 0.009;            // line half-width (rad) ~0.5 deg
-        float dTheta = abs(theta - floor(theta / s + 0.5) * s);
-        float par = 1.0 - smoothstep(0.0, lw, dTheta);
-        float dPhi = abs(phi_angle - floor(phi_angle / s + 0.5) * s);
-        float merW = lw / max(sin(theta), 0.15);
-        float mer = 1.0 - smoothstep(0.0, merW, dPhi);
-        float horiz = 1.0 - smoothstep(0.0, lw * 1.4, abs(theta - PI * 0.5));
-        vec3 gridCol = mix(vec3(0.40, 0.90, 1.0), vec3(1.0, 0.80, 0.30), horiz);
-        color = mix(color, gridCol, max(max(par, mer), horiz) * 0.75);
+        float s = PI / 6.0;          // 30 deg spacing
+        // Blender-style: constant ~1.4 px screen width via fwidth (thin but
+        // crisp at any distance). Suppress the azimuth seam and pole convergence
+        // where fwidth spikes.
+        float tc = theta / s, pc = phi_angle / s;
+        float wt = fwidth(tc), wp = fwidth(pc);
+        float par = (wt < 0.1) ? 1.0 - smoothstep(0.0, 1.4, abs(fract(tc - 0.5) - 0.5) / max(wt, 1e-6)) : 0.0;
+        float mer = (wp < 0.1) ? 1.0 - smoothstep(0.0, 1.4, abs(fract(pc - 0.5) - 0.5) / max(wp, 1e-6)) : 0.0;
+        float hc = (theta - PI * 0.5) / s, wh = fwidth(hc);
+        float horiz = (wh < 0.1) ? 1.0 - smoothstep(0.0, 2.2, abs(hc) / max(wh, 1e-6)) : 0.0;
+        color = mix(color, vec3(0.45, 0.90, 1.0), max(par, mer) * 0.7);
+        color = mix(color, vec3(1.0, 0.78, 0.30), horiz * 0.85);
     }
 
     // Subtle lighting for 3D depth perception
