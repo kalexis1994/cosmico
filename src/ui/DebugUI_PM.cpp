@@ -203,10 +203,11 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
             ImGui::Text("  H(a) = %.6f", state->hubble);
             ImGui::Checkbox("Physical view (expand by a)", &params.physicalView);
             if (params.physicalView) {
-                float scale = (params.aInit > 1e-6f)
-                            ? (float)(state->scaleFactor / params.aInit) : 1.0f;
+                float raw = (params.aInit > 1e-6f)
+                          ? (float)(state->scaleFactor / params.aInit) : 1.0f;
                 ImGui::SameLine();
-                ImGui::TextDisabled("(x%.1f)", scale);
+                if (raw > 2.5f) ImGui::TextDisabled("(x2.5 cap, real x%.0f)", raw);
+                else            ImGui::TextDisabled("(x%.1f)", raw);
             }
         }
         ImGui::Separator();

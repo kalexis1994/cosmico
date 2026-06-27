@@ -162,8 +162,13 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
         if (m_simulation->backend() == ComputeBackend::PM) {
             const PMParams& pmp = m_simulation->pmParams();
             const PMStateData* pmSt = m_simulation->pmState();
-            if (pmp.physicalView && pmSt && pmSt->scaleFactor > 0.0 && pmp.aInit > 1e-6f)
+            if (pmp.physicalView && pmSt && pmSt->scaleFactor > 0.0 && pmp.aInit > 1e-6f) {
                 coordScale = static_cast<float>(pmSt->scaleFactor / pmp.aInit);
+                // The real expansion (up to ~×500) flings the web past the far
+                // plane into the dark. Cap the on-screen scaling so the voids
+                // visibly open up but the structure stays framed and lit.
+                if (coordScale > 2.5f) coordScale = 2.5f;
+            }
         }
         pc.coordScale = coordScale;
 
