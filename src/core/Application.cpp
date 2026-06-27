@@ -427,7 +427,7 @@ void Application::mainLoop() {
                     // Rigorous CMB: Gaussian a_ℓm field from a ΛCDM C_ℓ. One-shot,
                     // cached; re-synthesize only when the seed changes.
                     if (m_cmbSynthSeed != ip.cmbSeed) {
-                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 500, ip.cmbSeed);
+                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 900, ip.cmbSeed);
                         m_cmbSynthSeed = ip.cmbSeed;
                     }
                 } else {

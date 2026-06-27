@@ -54,6 +54,19 @@ void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed) {
         }
     }
 
+    // Pre-compute the latitude-independent Legendre recurrence coefficients so
+    // the hot per-latitude loop is multiply-adds only (no sqrt).
+    std::vector<double> diag(lMax + 1, 0.0), first(lMax + 1, 0.0);
+    std::vector<double> alpha(ncoef, 0.0), beta(ncoef, 0.0);
+    for (int m = 1; m <= lMax; ++m) diag[m] = std::sqrt((2.0 * m + 1.0) / (2.0 * m));
+    for (int m = 0; m <= lMax; ++m) if (m + 1 <= lMax) first[m] = std::sqrt(2.0 * m + 3.0);
+    for (int m = 0; m <= lMax; ++m)
+        for (int l = m + 2; l <= lMax; ++l) {
+            alpha[idx(l, m)] = std::sqrt((2.0*l-1.0)*(2.0*l+1.0)/(((double)l-m)*((double)l+m)));
+            beta[idx(l, m)]  = std::sqrt((2.0*l+1.0)*((double)l-m-1.0)*((double)l+m-1.0)
+                                         /((2.0*l-3.0)*((double)l-m)*((double)l+m)));
+        }
+
     // Azimuth tables, laid out [j][m] so the inner m-loop is contiguous.
     std::vector<float> cosT((size_t)W * (lMax + 1)), sinT((size_t)W * (lMax + 1));
     for (int j = 0; j < W; ++j) {
@@ -65,27 +78,26 @@ void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed) {
 
     std::vector<double> T((size_t)W * H);
     std::vector<double> bc(lMax + 1), bs(lMax + 1), lam(lMax + 1);
+    const double lam00 = std::sqrt(1.0 / (4.0 * PI));
     double sum = 0.0, sum2 = 0.0;
 
     for (int i = 0; i < H; ++i) {
         double theta = PI * (i + 0.5) / H, x = std::cos(theta), st = std::sin(theta);
         for (int m = 0; m <= lMax; ++m) { bc[m] = 0.0; bs[m] = 0.0; }
 
-        // Fully-normalised associated Legendre λ_ℓm(x) via stable recurrence,
-        // accumulating the azimuthal coefficients b_m^{cos,sin}.
-        double dmm = std::sqrt(1.0 / (4.0 * PI));   // λ_00
+        // λ_ℓm(x) via the pre-computed normalised recurrence, accumulating the
+        // azimuthal coefficients b_m^{cos,sin} as we go.
+        double dmm = lam00;                              // λ_00
         for (int m = 0; m <= lMax; ++m) {
-            if (m > 0) dmm *= std::sqrt((2.0 * m + 1.0) / (2.0 * m)) * st;  // λ_mm
+            if (m > 0) dmm *= diag[m] * st;              // λ_mm
             lam[m] = dmm;
             double lm2 = dmm, lm1 = dmm;
-            if (m + 1 <= lMax) { lm1 = std::sqrt(2.0 * m + 3.0) * x * dmm; lam[m + 1] = lm1; }
+            if (m + 1 <= lMax) { lm1 = first[m] * x * dmm; lam[m + 1] = lm1; }
             for (int l = m + 2; l <= lMax; ++l) {
-                double a = std::sqrt((2.0*l-1.0)*(2.0*l+1.0)/(((double)l-m)*((double)l+m)));
-                double b = std::sqrt((2.0*l+1.0)*((double)l-m-1.0)*((double)l+m-1.0)
-                                     /((2.0*l-3.0)*((double)l-m)*((double)l+m)));
-                double v = a * x * lm1 - b * lm2; lam[l] = v; lm2 = lm1; lm1 = v;
+                double v = alpha[idx(l, m)] * x * lm1 - beta[idx(l, m)] * lm2;
+                lam[l] = v; lm2 = lm1; lm1 = v;
             }
-            double s2 = (m == 0) ? 1.0 : std::sqrt(2.0);
+            double s2 = (m == 0) ? 1.0 : 1.4142135623730951;  // sqrt(2)
             for (int l = m; l <= lMax; ++l) {
                 bc[m] += cc[idx(l, m)] * lam[l] * s2;
                 bs[m] += cs[idx(l, m)] * lam[l] * s2;

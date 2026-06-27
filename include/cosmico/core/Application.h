@@ -82,8 +82,8 @@ private:
 
     // Staging buffers for CUDA -> CPU -> Vulkan texture uploads
     static constexpr int VOLUME_TEXTURE_N = 128;
-    static constexpr int CMB_MAP_W = 1024;
-    static constexpr int CMB_MAP_H = 512;
+    static constexpr int CMB_MAP_W = 2048;
+    static constexpr int CMB_MAP_H = 1024;
     std::vector<uint8_t> m_volumeData;
     std::vector<uint8_t> m_cmbData;
 

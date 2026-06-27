@@ -8,8 +8,8 @@
 
 namespace cosmico {
 
-static constexpr int CMB_MAP_W = 1024;
-static constexpr int CMB_MAP_H = 512;
+static constexpr int CMB_MAP_W = 2048;
+static constexpr int CMB_MAP_H = 1024;
 static constexpr VkFormat CMB_FORMAT = VK_FORMAT_R8_UNORM;
 
 void CMBRenderer::init(VkContext& ctx, VkRenderPass renderPass, const std::string& shaderDir) {
