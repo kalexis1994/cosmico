@@ -68,9 +68,19 @@ void Camera::updateOrbit(const Input& input, float /*dt*/, float viewportHeight,
                          float cursorFromCenterX, float cursorFromCenterY) {
     // Orbit with right mouse button
     if (input.isMouseButtonDown(GLFW_MOUSE_BUTTON_RIGHT)) {
+        glm::vec3 fixedPos = position();  // capture before rotating (anchored mode)
         m_yaw -= static_cast<float>(input.mouseDeltaX()) * orbitSpeed;
         m_pitch -= static_cast<float>(input.mouseDeltaY()) * orbitSpeed;
         m_pitch = std::clamp(m_pitch, -1.5f, 1.5f);
+        if (fovZoom) {
+            // Anchored view: rotate in place (look around) instead of orbiting
+            // the target — move the target around the fixed camera position so
+            // position() stays put while the view direction turns.
+            float x = m_distance * std::cos(m_pitch) * std::sin(m_yaw);
+            float y = m_distance * std::sin(m_pitch);
+            float z = m_distance * std::cos(m_pitch) * std::cos(m_yaw);
+            m_target = fixedPos - glm::vec3(x, y, z);
+        }
     }
 
     // Camera basis vectors (shared by pan and zoom-towards-cursor)
