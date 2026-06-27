@@ -2,6 +2,7 @@
 #include <cosmico/simulation/PMParams.h>
 #include <vector>
 #include <cstdint>
+#include <fstream>
 
 // Forward declare CUDA/cuFFT types
 typedef int cufftHandle;
@@ -136,6 +137,14 @@ private:
     double m_h_energySums[6] = {};
     std::vector<float> m_h_spectrum;
     std::vector<int> m_h_counts;
+
+    // Scientific diagnostic log (CSV): σ_δ growth vs linear theory D(a), virial,
+    // energies — written next to the executable as pm_science.csv.
+    void* m_d_gridSums = nullptr;       // double[2] — Σρ, Σρ²
+    std::ofstream m_sciLog;
+    bool m_sciLogOpen = false;
+    double m_sigmaInit = -1.0;          // σ_δ at first sample (reference)
+    double m_growthInit = -1.0;         // D(a) at first sample (reference)
 };
 
 } // namespace cosmico

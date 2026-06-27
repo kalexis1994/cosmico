@@ -33,6 +33,17 @@
 
 namespace cosmico {
 
+// Linear growth factor D(a) (Carroll, Press & Turner 1992 fit; exact for EdS).
+static double growthFactor(double a, double OmegaM) {
+    double OmegaL = (1.0 - OmegaM > 0.0) ? (1.0 - OmegaM) : 0.0;
+    double Ez2 = OmegaM / (a * a * a) + OmegaL;
+    double Om = (OmegaM / (a * a * a)) / Ez2;
+    double OL = OmegaL / Ez2;
+    double g = 2.5 * Om / (std::pow(Om, 4.0 / 7.0) - OL
+                           + (1.0 + Om / 2.0) * (1.0 + OL / 70.0));
+    return a * g;
+}
+
 // ─── VRAM estimation ────────────────────────────────────────────────────
 
 size_t PMCompute::estimateVRAM(int gridN, int particleCount) {
@@ -87,6 +98,7 @@ void PMCompute::allocateGridBuffers(int N) {
     CUDA_CHECK(cudaMalloc(&m_d_sinkCount, sizeof(int)));
     CUDA_CHECK(cudaMalloc(&m_d_newParticleCount, sizeof(int)));
     CUDA_CHECK(cudaMalloc(&m_d_sinkList, MAX_SINKS * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&m_d_gridSums, 2 * sizeof(double)));
 
     m_currentGridN = N;
 
@@ -106,6 +118,7 @@ void PMCompute::freeGridBuffers() {
     if (m_d_sinkCount) { cudaFree(m_d_sinkCount); m_d_sinkCount = nullptr; }
     if (m_d_newParticleCount) { cudaFree(m_d_newParticleCount); m_d_newParticleCount = nullptr; }
     if (m_d_sinkList) { cudaFree(m_d_sinkList); m_d_sinkList = nullptr; }
+    if (m_d_gridSums) { cudaFree(m_d_gridSums); m_d_gridSums = nullptr; }
     freeIsolatedBuffers();
     m_currentGridN = 0;
 }
@@ -219,6 +232,7 @@ void PMCompute::destroy() {
     }
     destroyFFTPlans();
     freeGridBuffers();
+    if (m_sciLog.is_open()) m_sciLog.close();
 }
 
 void PMCompute::setParticleBuffer(void* cudaParticlePtr, size_t bufferSize) {
@@ -363,6 +377,12 @@ void PMCompute::resetState() {
     m_state.absorbedCount = 0;
     m_scaleFactor = 1.0f;  // Will be set to aInit on first comoving step
     memset(m_h_energySums, 0, sizeof(m_h_energySums));
+
+    // Fresh scientific log for each run
+    if (m_sciLog.is_open()) m_sciLog.close();
+    m_sciLogOpen = false;
+    m_sigmaInit = -1.0;
+    m_growthInit = -1.0;
 }
 
 // ─── Step: full PM pipeline ─────────────────────────────────────────────
@@ -708,15 +728,57 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
                                       rhoMean, stream);
     }
 
-    // ── Periodic diagnostic to stderr so structure growth shows in the run log ──
-    // As matter collapses into the cosmic web, KE rises and PE deepens (more
-    // negative); a/z track the expansion. No "[PM] step=" lines = sim is paused.
-    // (Energies carry ~1 frame latency from the async readback above.)
-    if (m_state.step % 400 == 0) {
-        fprintf(stderr, "[PM] step=%d a=%.3f z=%.2f KE=%.4g PE=%.4g E=%.4g |p|=%.3g\n",
-                m_state.step, m_state.scaleFactor, m_state.redshift,
-                m_state.kineticEnergy, m_state.potentialEnergy,
-                m_state.totalEnergy, m_state.momentumMag);
+    // ── Periodic scientific diagnostic (every 400 sub-steps) ─────────────────
+    // Corroboration: the measured RMS density contrast σ_δ should grow like the
+    // linear growth factor D(a) while structure is linear (σ_δ ≲ 1), then run
+    // ahead of it as collapse turns non-linear. Written to stderr + pm_science.csv.
+    if (params.comoving && m_state.step % 400 == 0) {
+        // σ_δ from the grid (m_d_forceX holds ρ from the luminosity deposit above)
+        cuda::launchPMGridSums(static_cast<float*>(m_d_forceX), N3,
+                               static_cast<double*>(m_d_gridSums), stream);
+        double sums[2] = {0.0, 0.0};
+        CUDA_CHECK(cudaMemcpyAsync(sums, m_d_gridSums, 2 * sizeof(double),
+                                   cudaMemcpyDeviceToHost, stream));
+        CUDA_CHECK(cudaStreamSynchronize(stream));
+        double ratio = (sums[0] > 0.0) ? (sums[1] * (double)N3) / (sums[0] * sums[0]) : 1.0;
+        double sigmaDelta = std::sqrt(std::max(ratio - 1.0, 0.0));
+
+        double a = m_state.scaleFactor;
+        double Dlin = growthFactor(a, params.OmegaM);
+        // Stored velocity is the canonical momentum p = a²·ẋ, so ½Σp² is
+        // a⁴-inflated; the physical peculiar KE is KE/a². Virialised → 2KE/|PE|≈1.
+        double KE = (a > 1e-6) ? m_state.kineticEnergy / (a * a) : m_state.kineticEnergy;
+        double PE = m_state.potentialEnergy;
+        double virial = (PE != 0.0) ? (2.0 * KE / std::fabs(PE)) : 0.0;
+        double Etot = KE + PE;
+
+        if (m_sigmaInit < 0.0) {
+            m_sigmaInit = (sigmaDelta > 1e-12) ? sigmaDelta : 1e-12;
+            m_growthInit = Dlin;
+        }
+        double Dnorm = (m_growthInit > 0.0) ? Dlin / m_growthInit : 1.0;
+        double gnorm = sigmaDelta / m_sigmaInit;
+
+        fprintf(stderr, "[PM] step=%d a=%.3f z=%.2f sigma=%.4g Dlin=%.3f growth=%.3f "
+                        "virial=%.3f KE=%.4g PE=%.4g\n",
+                m_state.step, a, m_state.redshift, sigmaDelta, Dnorm, gnorm,
+                virial, KE, PE);
+
+        if (!m_sciLogOpen) {
+            m_sciLog.open("pm_science.csv", std::ios::out | std::ios::trunc);
+            if (m_sciLog.is_open())
+                m_sciLog << "step,time,a,z,H,sigmaDelta,Dlin_norm,growth_norm,"
+                            "virial,KE,PE,Etot,sinks\n";
+            m_sciLogOpen = true;
+        }
+        if (m_sciLog.is_open()) {
+            m_sciLog << m_state.step << ',' << m_state.time << ',' << a << ','
+                     << m_state.redshift << ',' << m_state.hubble << ','
+                     << sigmaDelta << ',' << Dnorm << ',' << gnorm << ','
+                     << virial << ',' << KE << ',' << PE << ','
+                     << Etot << ',' << m_state.sinkCount << '\n';
+            m_sciLog.flush();
+        }
     }
 }
 

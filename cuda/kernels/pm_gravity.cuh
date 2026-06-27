@@ -90,6 +90,10 @@ void launchPMStoreLuminosity(ParticleGpu* particles, const float* density,
                              int particleCount, int gridN, float boxSize,
                              float meanDensity, cudaStream_t stream);
 
+// Density-field Σρ and Σρ² (out[2]) for the σ_δ growth diagnostic
+void launchPMGridSums(const float* density, int N3, double* d_out,
+                      cudaStream_t stream);
+
 // 12. Sink formation: mark high-density cells as sinks, kept in a compact
 //     index list (d_sinkList, size d_sinkCount, capped at maxSinks).
 void launchPMSinkFormation(ParticleGpu* particles, const float* density,

@@ -679,6 +679,33 @@ void launchPMStoreLuminosity(ParticleGpu* particles, const float* density,
         particles, density, particleCount, gridN, boxSize, meanDensity);
 }
 
+// ─── Density-field sums (for the σ_δ growth diagnostic) ──────────────
+// out[0] = Σρ, out[1] = Σρ²  over the grid; the host turns these into
+// σ_δ = sqrt(<ρ²>/<ρ>² − 1), the RMS density contrast.
+__global__ void pmGridSumsKernel(const float* __restrict__ density,
+                                 int N3, double* __restrict__ out) {
+    __shared__ double s_sum[PM_BLOCK];
+    __shared__ double s_sq[PM_BLOCK];
+    int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + tid;
+    double r = (idx < N3) ? (double)density[idx] : 0.0;
+    s_sum[tid] = r;
+    s_sq[tid]  = r * r;
+    __syncthreads();
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) { s_sum[tid] += s_sum[tid + s]; s_sq[tid] += s_sq[tid + s]; }
+        __syncthreads();
+    }
+    if (tid == 0) { atomicAdd(&out[0], s_sum[0]); atomicAdd(&out[1], s_sq[0]); }
+}
+
+void launchPMGridSums(const float* density, int N3, double* d_out,
+                      cudaStream_t stream) {
+    cudaMemsetAsync(d_out, 0, 2 * sizeof(double), stream);
+    int blocks = (N3 + PM_BLOCK - 1) / PM_BLOCK;
+    pmGridSumsKernel<<<blocks, PM_BLOCK, 0, stream>>>(density, N3, d_out);
+}
+
 // ─── 12. Sink formation: create sinks in high-density cells ──────────
 // Each normal particle checks its local density. If ρ > threshold × ρ_mean,
 // and it is the most massive particle in its cell, it becomes a sink.
