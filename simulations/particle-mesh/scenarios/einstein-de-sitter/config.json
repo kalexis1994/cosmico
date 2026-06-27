@@ -1,0 +1,12 @@
+{
+  "title": "Einstein-de Sitter",
+  "description": "A matter-only universe (Omega_m = 1, no dark energy). Gravity is never opposed, so the cosmic web keeps collapsing into ever-denser filaments and halos without limit. Linear growth D(a) = a never stops, and structure virialises into bound clumps (validated: 2KE/|PE| ~ 1.2).",
+  "initialCondition": "Cosmological",
+  "params": {
+    "particleCount": 262144,
+    "omegaM": 1.0,
+    "aInit": 0.3,
+    "aMax": 50.0,
+    "zeldovichAmplitude": 0.4
+  }
+}

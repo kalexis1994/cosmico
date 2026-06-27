@@ -1,0 +1,12 @@
+{
+  "title": "Lambda-CDM (Dark Energy)",
+  "description": "Our universe: 30% matter, 70% dark energy (Omega_Lambda = 0.7). Seeded early (z ~ 9) so the cosmic web forms during the matter era, then dark energy takes over (a > 0.75) and freezes structure growth. The web stops evolving while space keeps expanding. D(a)^2 plateaus around 8x instead of running away (validated against linear theory).",
+  "initialCondition": "Cosmological",
+  "params": {
+    "particleCount": 262144,
+    "omegaM": 0.3,
+    "aInit": 0.1,
+    "aMax": 50.0,
+    "zeldovichAmplitude": 0.3
+  }
+}

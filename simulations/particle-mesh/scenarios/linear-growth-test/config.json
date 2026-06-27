@@ -1,0 +1,12 @@
+{
+  "title": "Linear Growth Test",
+  "description": "A low-amplitude Einstein-de Sitter field (small Zel'dovich displacement) that starts in the linear regime. A diagnostic preset, not a showpiece: the measured large-scale P(k) growth should track linear theory D(a)^2 while sigma_delta << 1, then deviate as it turns non-linear. Watch pm_science.csv (next to the exe).",
+  "initialCondition": "Cosmological",
+  "params": {
+    "particleCount": 262144,
+    "omegaM": 1.0,
+    "aInit": 0.1,
+    "aMax": 10.0,
+    "zeldovichAmplitude": 0.08
+  }
+}
