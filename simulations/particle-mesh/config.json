@@ -11,7 +11,7 @@
     "gridSize": 128,
     "boxSize": 100.0,
     "stepsPerFrame": 20,
-    "omegaM": 1.0,
+    "omegaM": 0.3,
     "H0": 0.05,
     "aInit": 0.3,
     "aMax": 50.0,

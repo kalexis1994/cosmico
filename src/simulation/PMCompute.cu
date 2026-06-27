@@ -33,15 +33,23 @@
 
 namespace cosmico {
 
-// Linear growth factor D(a) (Carroll, Press & Turner 1992 fit; exact for EdS).
+// Linear growth factor D(a): exact growing mode for a flat ΛCDM/EdS universe,
+//   D(a) = (5/2)·Ωm·E(a)·∫₀^a da'/(a'·E(a'))³,   E(a)=√(Ωm/a³+Ω_Λ).
+// Valid for ANY a — monotone and plateaus once Λ dominates (the dark-energy
+// signature), unlike the Carroll-Press-Turner fit which only holds for a≲1 and
+// spuriously decays as ~1/a² in the future. Reduces to D=a for EdS (Ωm=1).
 static double growthFactor(double a, double OmegaM) {
     double OmegaL = (1.0 - OmegaM > 0.0) ? (1.0 - OmegaM) : 0.0;
-    double Ez2 = OmegaM / (a * a * a) + OmegaL;
-    double Om = (OmegaM / (a * a * a)) / Ez2;
-    double OL = OmegaL / Ez2;
-    double g = 2.5 * Om / (std::pow(Om, 4.0 / 7.0) - OL
-                           + (1.0 + Om / 2.0) * (1.0 + OL / 70.0));
-    return a * g;
+    auto Efn = [&](double x) { return std::sqrt(OmegaM / (x * x * x) + OmegaL); };
+    const int N = 1024;
+    double lo = 1e-5, dx = (a - lo) / N;
+    if (dx <= 0.0) return a;
+    double sum = 0.0;                                  // trapezoidal ∫₀^a
+    for (int i = 0; i <= N; ++i) {
+        double x = lo + i * dx, xe = x * Efn(x);
+        sum += ((i == 0 || i == N) ? 0.5 : 1.0) / (xe * xe * xe);
+    }
+    return 2.5 * OmegaM * Efn(a) * sum * dx;
 }
 
 // ─── VRAM estimation ────────────────────────────────────────────────────
@@ -768,15 +776,22 @@ void PMCompute::step(const PMParams& params, void* cudaStream) {
             m_sciLog.open("pm_science.csv", std::ios::out | std::ios::trunc);
             if (m_sciLog.is_open())
                 m_sciLog << "step,time,a,z,H,sigmaDelta,Dlin_norm,growth_norm,"
-                            "virial,KE,PE,Etot,sinks\n";
+                            "virial,KE,PE,Etot,sinks,Pk4,Pk10,Pk20,Pk40\n";
             m_sciLogOpen = true;
         }
         if (m_sciLog.is_open()) {
+            // A few power-spectrum bins (mode ≈ bin index) for offline P(k) vs
+            // D(a)² corroboration: large-scale (4,10), near the BBKS peak (20),
+            // small-scale/shot-dominated (40).
+            auto pk = [&](int b) -> double {
+                return ((int)m_state.powerSpectrum.size() > b) ? m_state.powerSpectrum[b] : 0.0;
+            };
             m_sciLog << m_state.step << ',' << m_state.time << ',' << a << ','
                      << m_state.redshift << ',' << m_state.hubble << ','
                      << sigmaDelta << ',' << Dnorm << ',' << gnorm << ','
                      << virial << ',' << KE << ',' << PE << ','
-                     << Etot << ',' << m_state.sinkCount << '\n';
+                     << Etot << ',' << m_state.sinkCount << ','
+                     << pk(4) << ',' << pk(10) << ',' << pk(20) << ',' << pk(40) << '\n';
             m_sciLog.flush();
         }
     }
