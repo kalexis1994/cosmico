@@ -207,6 +207,9 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
                           ? (float)(state->scaleFactor / params.aInit) : 1.0f;
                 ImGui::SameLine();
                 ImGui::TextDisabled(raw >= 10.0f ? "(x%.0f)" : "(x%.1f)", raw);
+                ImGui::Checkbox("Isotropic", &params.isotropicExpansion);
+                ImGui::SameLine();
+                ImGui::TextDisabled("(off = camera rides the flow)");
             }
         }
         ImGui::SliderFloat("Exposure", &params.renderExposure, 0.25f, 16.0f,

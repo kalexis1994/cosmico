@@ -20,7 +20,9 @@ struct ParticleRenderPushConstants {
     float lumStrength;                 // 4B  (0 = speed color, 1 = density luminosity)
     float coordScale;                  // 4B  position scale about origin (1 = comoving, a/aInit = physical)
     float exposure;                    // 4B  brightness multiplier on output (camera "exposure")
-};  // 148B → padded to 160 (16-byte struct alignment)
+    alignas(16) float anchorR[4];     // 16B expansion anchor, render space (0 = isotropic about origin)
+    alignas(16) float anchorQ[4];     // 16B expansion anchor, comoving space (0 = isotropic)
+};  // = 192 bytes
 
 class ParticleRenderer {
 public:

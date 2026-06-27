@@ -125,6 +125,12 @@ private:
     uint64_t m_simStepCounter = 0;
     double m_simTime = 0.0;
     bool m_playbackMode = false;
+
+    // Physical-view expansion anchor: captured when isotropic is turned off so
+    // the box expands about the camera's spot (camera rides the Hubble flow).
+    float m_expAnchorR[3] = {0.0f, 0.0f, 0.0f};
+    float m_expAnchorQ[3] = {0.0f, 0.0f, 0.0f};
+    bool m_expAnchored = false;
 };
 
 } // namespace cosmico

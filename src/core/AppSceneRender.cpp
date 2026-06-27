@@ -171,6 +171,30 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
         pc.exposure = (m_simulation->backend() == ComputeBackend::PM)
                     ? m_simulation->pmParams().renderExposure : 1.0f;
 
+        // Expansion anchor. Isotropic (default) expands about the origin
+        // (anchor = 0). When the user turns isotropic off, freeze the anchor at
+        // the camera's current spot so the box expands about it — the camera
+        // then rides the Hubble flow and distant matter recedes faster.
+        bool anchored = (m_simulation->backend() == ComputeBackend::PM)
+                      && m_simulation->pmParams().physicalView
+                      && !m_simulation->pmParams().isotropicExpansion;
+        if (anchored) {
+            if (!m_expAnchored && coordScale > 1e-6f) {  // edge: capture the anchor
+                m_expAnchorR[0] = camPos.x; m_expAnchorR[1] = camPos.y; m_expAnchorR[2] = camPos.z;
+                m_expAnchorQ[0] = camPos.x / coordScale;
+                m_expAnchorQ[1] = camPos.y / coordScale;
+                m_expAnchorQ[2] = camPos.z / coordScale;
+                m_expAnchored = true;
+            }
+        } else {
+            m_expAnchored = false;
+        }
+        for (int i = 0; i < 3; ++i) {
+            pc.anchorR[i] = anchored ? m_expAnchorR[i] : 0.0f;
+            pc.anchorQ[i] = anchored ? m_expAnchorQ[i] : 0.0f;
+        }
+        pc.anchorR[3] = pc.anchorQ[3] = 0.0f;
+
         VkDescriptorSet texSet = m_planetTextures
             ? m_planetTextures->descriptorSet() : VK_NULL_HANDLE;
         m_particleRenderer->draw(cmd,

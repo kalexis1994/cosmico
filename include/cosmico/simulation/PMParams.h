@@ -55,6 +55,11 @@ struct PMParams {
     // Camera "exposure": multiplies particle brightness on output. Lifts faint
     // diffuse structure (and the dispersed physical-view web) out of the dark.
     float renderExposure = 1.0f;
+
+    // Physical view: true = expand about the origin (isotropic, camera watches
+    // from outside). false = anchor the camera to its spot and expand about it,
+    // so it rides the Hubble flow (distant matter recedes faster, our real view).
+    bool isotropicExpansion = true;
 };
 
 } // namespace cosmico

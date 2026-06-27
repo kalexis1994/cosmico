@@ -24,6 +24,8 @@ layout(push_constant) uniform PushConstants {
     float lumStrength;
     float coordScale;  // 1 = comoving frame; a/aInit = physical (box inflates)
     float exposure;    // brightness multiplier (unused in vertex stage)
+    vec4 anchorR;      // expansion anchor in render space (xyz; 0 = about origin)
+    vec4 anchorQ;      // expansion anchor in comoving space (xyz; 0 = about origin)
 };
 
 layout(location = 0) out float outSpeed;
@@ -63,10 +65,11 @@ void main() {
     }
 
     vec3 camP = vec3(camRight.w, camUp.w, camForward.w);
-    // Comoving→physical: positions are centred on the origin, so scaling them
-    // by a(t)/aInit inflates the box and makes structure recede (coordScale=1
-    // leaves the comoving frame untouched).
-    vec3 worldPos = p.position.xyz * coordScale;
+    // Comoving→physical: expand positions by a(t)/aInit about an anchor point.
+    // Isotropic (anchor=0): worldPos = q·s, box inflates about the origin.
+    // Anchored: anchor rides the camera's spot, so it participates in the Hubble
+    // flow — distant matter recedes faster, as we see it from inside the universe.
+    vec3 worldPos = anchorR.xyz + (p.position.xyz - anchorQ.xyz) * coordScale;
     float smoothingRadius = p.velocity.w;
 
     // Compute billboard half-extent in world space
