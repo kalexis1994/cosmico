@@ -177,7 +177,8 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
         // then rides the Hubble flow and distant matter recedes faster.
         bool anchored = (m_simulation->backend() == ComputeBackend::PM)
                       && m_simulation->pmParams().physicalView
-                      && !m_simulation->pmParams().isotropicExpansion;
+                      && !m_simulation->pmParams().isotropicExpansion
+                      && m_camera->mode() != CameraMode::Free;  // orbit-only; free rides the flow
         if (anchored) {
             if (!m_expAnchored && coordScale > 1e-6f) {  // edge: capture the anchor
                 m_expAnchorR[0] = camPos.x; m_expAnchorR[1] = camPos.y; m_expAnchorR[2] = camPos.z;
@@ -194,6 +195,17 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
             pc.anchorQ[i] = anchored ? m_expAnchorQ[i] : 0.0f;
         }
         pc.anchorR[3] = pc.anchorQ[3] = 0.0f;
+
+        // Free-fly camera in physical view rides the Hubble flow: scale its
+        // position by the per-frame expansion ratio so the flow carries it from
+        // wherever it is (skip the big jump when physical view toggles on/off).
+        if (m_simulation->backend() == ComputeBackend::PM
+            && m_simulation->pmParams().physicalView
+            && m_camera->mode() == CameraMode::Free) {
+            float ratio = (m_prevCoordScale > 1e-6f) ? (coordScale / m_prevCoordScale) : 1.0f;
+            if (ratio > 0.5f && ratio < 2.0f) m_camera->rideExpansion(ratio);
+        }
+        m_prevCoordScale = coordScale;
 
         VkDescriptorSet texSet = m_planetTextures
             ? m_planetTextures->descriptorSet() : VK_NULL_HANDLE;

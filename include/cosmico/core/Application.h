@@ -132,6 +132,7 @@ private:
     float m_expAnchorQ[3] = {0.0f, 0.0f, 0.0f};
     bool m_expAnchored = false;
     float m_savedFov = 0.0f;  // FOV stashed while the anchored view uses FOV-zoom
+    float m_prevCoordScale = 1.0f;  // last frame's expansion scale (free-cam ride)
 };
 
 } // namespace cosmico

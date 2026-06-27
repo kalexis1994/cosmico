@@ -214,6 +214,7 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
         }
         ImGui::SliderFloat("Exposure", &params.renderExposure, 0.25f, 16.0f,
                            "%.2fx", ImGuiSliderFlags_Logarithmic);
+        ImGui::TextDisabled("Tab: fly camera (WASD + mouse-look)");
         ImGui::Separator();
 
         ImGui::Text("Energy");

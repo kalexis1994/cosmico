@@ -36,6 +36,11 @@ public:
     bool fovZoom = false;
 
     CameraMode mode() const { return m_mode; }
+
+    // Carry the free-fly camera along with the cosmological expansion: scale its
+    // position about the origin by the per-frame ratio a_now/a_prev so the flow
+    // moves it from wherever it currently is.
+    void rideExpansion(float ratio) { if (m_mode == CameraMode::Free) m_freePos *= ratio; }
     void setMode(CameraMode m);
 
     glm::vec3 position() const;
