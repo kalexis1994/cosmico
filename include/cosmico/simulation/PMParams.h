@@ -46,6 +46,11 @@ struct PMParams {
 
     // Diagnostics
     bool showPowerSpectrum = true;      // Show P(k) plot in UI
+
+    // Rendering: when true, scale particle positions by a(t)/aInit about the
+    // origin so the box visibly inflates and structure recedes ("physical"
+    // coordinates). When false, render the comoving frame (expansion hidden).
+    bool physicalView = false;
 };
 
 } // namespace cosmico

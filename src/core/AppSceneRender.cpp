@@ -8,6 +8,7 @@
 #include <cosmico/renderer/OffscreenTarget.h>
 #include <cosmico/renderer/PlanetTextures.h>
 #include <cosmico/simulation/Simulation.h>
+#include <cosmico/simulation/PMCompute.h>
 #include <cosmico/simulation/InitialConditions.h>
 #include <cosmico/simulation/ParticleSystem.h>
 #include <cosmico/simulation/InflationCompute.h>
@@ -154,6 +155,17 @@ void Application::renderRunningState(VkCommandBuffer cmd) {
         // Density-luminosity shading: only the PM backend writes the per-particle
         // overdensity the shader needs; others keep the legacy speed coloring.
         pc.lumStrength = (m_simulation->backend() == ComputeBackend::PM) ? 1.0f : 0.0f;
+
+        // Physical-coordinate view (PM only): expand positions by a(t)/aInit so
+        // the box inflates and structure recedes; otherwise keep the comoving frame.
+        float coordScale = 1.0f;
+        if (m_simulation->backend() == ComputeBackend::PM) {
+            const PMParams& pmp = m_simulation->pmParams();
+            const PMStateData* pmSt = m_simulation->pmState();
+            if (pmp.physicalView && pmSt && pmSt->scaleFactor > 0.0 && pmp.aInit > 1e-6f)
+                coordScale = static_cast<float>(pmSt->scaleFactor / pmp.aInit);
+        }
+        pc.coordScale = coordScale;
 
         VkDescriptorSet texSet = m_planetTextures
             ? m_planetTextures->descriptorSet() : VK_NULL_HANDLE;

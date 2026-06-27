@@ -22,6 +22,7 @@ layout(push_constant) uniform PushConstants {
     float simTime;
     float showDarkMatter;
     float lumStrength;
+    float coordScale;  // 1 = comoving frame; a/aInit = physical (box inflates)
 };
 
 layout(location = 0) out float outSpeed;
@@ -61,7 +62,10 @@ void main() {
     }
 
     vec3 camP = vec3(camRight.w, camUp.w, camForward.w);
-    vec3 worldPos = p.position.xyz;
+    // Comoving→physical: positions are centred on the origin, so scaling them
+    // by a(t)/aInit inflates the box and makes structure recede (coordScale=1
+    // leaves the comoving frame untouched).
+    vec3 worldPos = p.position.xyz * coordScale;
     float smoothingRadius = p.velocity.w;
 
     // Compute billboard half-extent in world space
