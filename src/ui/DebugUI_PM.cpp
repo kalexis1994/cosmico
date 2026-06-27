@@ -206,8 +206,7 @@ void DebugUI::renderPM(PMParams& params, float fps, bool& paused,
                 float raw = (params.aInit > 1e-6f)
                           ? (float)(state->scaleFactor / params.aInit) : 1.0f;
                 ImGui::SameLine();
-                if (raw > 2.5f) ImGui::TextDisabled("(x2.5 cap, real x%.0f)", raw);
-                else            ImGui::TextDisabled("(x%.1f)", raw);
+                ImGui::TextDisabled(raw >= 10.0f ? "(x%.0f)" : "(x%.1f)", raw);
             }
         }
         ImGui::SliderFloat("Exposure", &params.renderExposure, 0.25f, 16.0f,
