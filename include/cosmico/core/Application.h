@@ -131,6 +131,7 @@ private:
     float m_expAnchorR[3] = {0.0f, 0.0f, 0.0f};
     float m_expAnchorQ[3] = {0.0f, 0.0f, 0.0f};
     bool m_expAnchored = false;
+    float m_savedFov = 0.0f;  // FOV stashed while the anchored view uses FOV-zoom
 };
 
 } // namespace cosmico

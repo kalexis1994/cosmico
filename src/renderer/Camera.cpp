@@ -98,7 +98,12 @@ void Camera::updateOrbit(const Input& input, float /*dt*/, float viewportHeight,
     // Zoom with scroll wheel — towards cursor
     float scroll = static_cast<float>(input.scrollDelta());
     if (scroll != 0.0f) {
-        if (orthographic) {
+        if (fovZoom) {
+            // Field-of-view zoom: magnify without moving the camera (the
+            // anchored expansion view keeps the camera fixed in space).
+            fovDegrees -= scroll * zoomSpeed * fovDegrees * 0.05f;
+            fovDegrees = std::clamp(fovDegrees, 2.0f, 110.0f);
+        } else if (orthographic) {
             float oldOrtho = orthoHeight;
             orthoHeight -= scroll * zoomSpeed * (orthoHeight * 0.1f);
             orthoHeight = std::max(orthoHeight, 0.5f);

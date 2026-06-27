@@ -30,6 +30,11 @@ public:
     bool orthographic = false;
     float orthoHeight = 50.0f;
 
+    // When true, the scroll wheel changes the field of view (visual zoom)
+    // instead of the dolly distance — used by the anchored expansion view,
+    // where the camera must stay fixed in space.
+    bool fovZoom = false;
+
     CameraMode mode() const { return m_mode; }
     void setMode(CameraMode m);
 

@@ -155,6 +155,19 @@ void Application::mainLoop() {
                     cursorX = static_cast<float>(m_input->mouseX()) - vpW * 0.5f;
                     cursorY = static_cast<float>(m_input->mouseY()) - vpH * 0.5f;
                 }
+                // Anchored expansion view: the camera is pinned in space, so the
+                // wheel does a field-of-view zoom. Stash/restore the FOV across
+                // the mode switch.
+                bool fovZoom = m_simulation
+                    && m_simulation->backend() == ComputeBackend::PM
+                    && m_simulation->pmParams().physicalView
+                    && !m_simulation->pmParams().isotropicExpansion;
+                if (fovZoom && !m_camera->fovZoom)
+                    m_savedFov = m_camera->fovDegrees;
+                else if (!fovZoom && m_camera->fovZoom && m_savedFov > 0.0f)
+                    m_camera->fovDegrees = m_savedFov;
+                m_camera->fovZoom = fovZoom;
+
                 m_camera->update(*m_input, dt, vpH, cursorX, cursorY);
             }
         }
