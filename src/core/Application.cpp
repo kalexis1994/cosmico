@@ -182,7 +182,8 @@ void Application::mainLoop() {
 
         // Recombination clock: advance cosmic age toward recombination
         // (~380,000 yr) over ~7 s, then stop — the CMB snapshot is "taken".
-        if (m_simulation && m_simulation->backend() == ComputeBackend::Inflation) {
+        // Respects pause: it only advances while the sim is running.
+        if (m_simulation && !m_paused && m_simulation->backend() == ComputeBackend::Inflation) {
             auto& ip = m_simulation->inflationParams();
             const float tRec = 380000.0f;
             if (ip.showCMB && ip.cmbTimeline && ip.cmbAgeYears < tRec) {
