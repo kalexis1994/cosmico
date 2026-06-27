@@ -114,15 +114,15 @@ void main() {
     if (showGrid > 0.5) {
         const float PI = 3.14159265;
         float s = PI / 6.0;          // 30 deg
-        float lw = 0.006;            // line half-width (rad)
+        float lw = 0.018;            // line half-width (rad) ~1 deg
         float dTheta = abs(theta - floor(theta / s + 0.5) * s);
-        float par = 1.0 - smoothstep(0.0, lw, dTheta);
+        float par = 1.0 - smoothstep(lw * 0.5, lw, dTheta);
         float dPhi = abs(phi_angle - floor(phi_angle / s + 0.5) * s);
         float merW = lw / max(sin(theta), 0.15);
-        float mer = 1.0 - smoothstep(0.0, merW, dPhi);
-        float horiz = 1.0 - smoothstep(0.0, lw * 1.6, abs(theta - PI * 0.5));
-        vec3 gridCol = mix(vec3(0.55, 0.85, 1.0), vec3(1.0, 0.85, 0.4), horiz);
-        color = mix(color, gridCol, max(max(par, mer), horiz) * 0.5);
+        float mer = 1.0 - smoothstep(merW * 0.5, merW, dPhi);
+        float horiz = 1.0 - smoothstep(lw, lw * 2.2, abs(theta - PI * 0.5));
+        vec3 gridCol = mix(vec3(0.40, 0.90, 1.0), vec3(1.0, 0.80, 0.30), horiz);
+        color = mix(color, gridCol, max(max(par, mer), horiz) * 0.85);
     }
 
     // Subtle lighting for 3D depth perception
