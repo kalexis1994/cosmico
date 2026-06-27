@@ -82,9 +82,11 @@ void main() {
     vec3 hitPos = ro + rd * tHit;
     vec3 normal = normalize(hitPos - center);
 
-    // Spherical coordinates for equirectangular UV
-    float theta = acos(clamp(normal.z, -1.0, 1.0));           // [0, pi]
-    float phi_angle = atan(normal.y, normal.x);                // [-pi, pi]
+    // Spherical coordinates for equirectangular UV. Pole on the +Y (world up)
+    // axis so the horizon (theta = 90 deg) is the horizontal plane the camera
+    // looks along by default, and zenith/nadir are up/down.
+    float theta = acos(clamp(normal.y, -1.0, 1.0));           // 0 = zenith (+Y), pi = nadir
+    float phi_angle = atan(normal.z, normal.x);                // azimuth around vertical
 
     vec2 texCoord = vec2(
         (phi_angle + 3.14159265) / (2.0 * 3.14159265),        // [0, 1] azimuthal
