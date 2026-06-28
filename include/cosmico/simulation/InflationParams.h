@@ -52,6 +52,11 @@ struct InflationParams {
     bool cmbCoupleNs = true;
     float cmbTiltExaggerate = 8.0f;
     unsigned cmbResync = 0;
+    // Cosmological parameters that drive the computed CMB C_ℓ — change these and
+    // the acoustic peaks move (Ω_m/h) and re-weight (Ω_b).
+    float cmbOmegaM = 0.30f;
+    float cmbOmegaB = 0.049f;
+    float cmbHubble = 0.68f;
     // Celestial alt-az grid overlaid on the CMB sphere (meridians of azimuth +
     // parallels of altitude, horizon highlighted) to help orient while looking.
     bool cmbGrid = false;

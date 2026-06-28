@@ -130,6 +130,13 @@ void DebugUI::renderInflation(InflationParams& params, float fps, bool& paused,
                     ImGui::Text("  inflaton n_s = %.3f  (dNs = %+.3f)", state->spectralIndex,
                                 (state->spectralIndex - 0.96f) * params.cmbTiltExaggerate);
             }
+            ImGui::TextDisabled("C_l computed from (peaks respond):");
+            ImGui::SliderFloat("Omega_m", &params.cmbOmegaM, 0.15f, 0.60f, "%.2f");
+            if (ImGui::IsItemDeactivatedAfterEdit()) params.cmbResync++;
+            ImGui::SliderFloat("Omega_b", &params.cmbOmegaB, 0.020f, 0.100f, "%.3f");
+            if (ImGui::IsItemDeactivatedAfterEdit()) params.cmbResync++;
+            ImGui::SliderFloat("h", &params.cmbHubble, 0.55f, 0.85f, "%.2f");
+            if (ImGui::IsItemDeactivatedAfterEdit()) params.cmbResync++;
         }
         ImGui::Checkbox("Recombination timeline", &params.cmbTimeline);
         if (ImGui::IsItemHovered())

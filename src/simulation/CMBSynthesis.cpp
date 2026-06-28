@@ -10,35 +10,59 @@ namespace {
 
 constexpr double PI = 3.14159265358979323846;
 
-// ΛCDM TT spectrum: D_ℓ = ℓ(ℓ+1)C_ℓ/2π in μK² (Planck-like anchor points, linear
-// interp). Sachs-Wolfe plateau + first three acoustic peaks (220, 540, 810) +
-// Silk damping. Validated: synthesising from this and re-measuring recovers it.
-double Dell(int ell) {
-    static const double L[] = {2,30,60,100,150,190,220,250,300,360,420,470,510,540,
-                               600,660,700,760,810,870,950,1050,1150,1300,1500,1700,2000,2500,4000};
-    static const double D[] = {1100,950,920,1700,3300,5000,5700,5500,4200,2600,1750,1900,2250,2480,
-                               2300,1800,1750,2150,2480,2300,1850,1450,1500,950,500,280,110,30,2};
-    static const int n = sizeof(L) / sizeof(L[0]);
-    double x = (double)ell;
-    if (x <= L[0]) return D[0];
-    if (x >= L[n-1]) return D[n-1];
-    for (int i = 1; i < n; ++i)
-        if (x <= L[i]) {
-            double t = (x - L[i-1]) / (L[i] - L[i-1]);
-            return D[i-1] + t * (D[i] - D[i-1]);
-        }
-    return D[n-1];
+// Acoustic scales from the cosmological parameters (Eisenstein-Hu 1998 /
+// Hu-Sugiyama 1996 fitting formulas): the acoustic multipole ellA (peak
+// spacing), the Silk-damping multipole ellD, and the baryon loading R*.
+struct Scales { double ellA, ellD, Rstar; };
+
+Scales computeScales(double Om, double Ob, double h) {
+    double wm = Om*h*h, wb = Ob*h*h, theta = 1.0;   // T_cmb/2.7 ~ 1
+    double g1 = 0.0783*std::pow(wb,-0.238)/(1.0+39.5*std::pow(wb,0.763));
+    double g2 = 0.560/(1.0+21.1*std::pow(wb,1.81));
+    double zstar = 1048.0*(1.0+0.00124*std::pow(wb,-0.738))*(1.0+g1*std::pow(wm,g2));
+    double zeq  = 2.5e4*wm;
+    double keq  = 7.46e-2*wm;                                  // Mpc^-1
+    double Rstar = 31.5*wb*(1000.0/zstar);
+    double Req   = 31.5*wb*(1000.0/zeq);
+    double rs = (2.0/(3.0*keq))*std::sqrt(6.0/Req)             // sound horizon, Mpc
+              * std::log((std::sqrt(1.0+Rstar)+std::sqrt(Rstar+Req))/(1.0+std::sqrt(Req)));
+    double kSilk = 1.6*std::pow(wb,0.52)*std::pow(wm,0.73)*(1.0+std::pow(10.4*wm,-0.95));
+    double OL = 1.0-Om; const int N = 2000; double sum = 0.0, dz = zstar/N;  // D_A integral
+    for (int i = 0; i <= N; ++i) {
+        double z = i*dz, E = std::sqrt(Om*(1.0+z)*(1.0+z)*(1.0+z)+OL);
+        sum += ((i==0||i==N)?0.5:1.0)/E;
+    }
+    double DA = (2997.92458/h)*sum*dz;                         // Mpc
+    Scales s; s.ellA = PI*DA/rs; s.ellD = kSilk*DA; s.Rstar = Rstar;
+    return s;
 }
-double Cl(int ell) {
-    if (ell < 2) return 0.0;
-    return 2.0 * PI * Dell(ell) / ((double)ell * (ell + 1));
+
+// D_ℓ = ℓ(ℓ+1)C_ℓ/2π: baryon-loaded photon-baryon acoustic oscillation (odd
+// peaks enhanced by the baryon zero-point offset) + Doppler + Silk damping +
+// Sachs-Wolfe plateau, tilted by n_s. Validated: first peak ~ ℓ220 for the
+// fiducial parameters; peaks shift with Ω_m/h and re-weight with Ω_b.
+double Dell(double ell, const Scales& s, double ns) {
+    if (ell < 2.0) ell = 2.0;
+    double R = s.Rstar;
+    double x = PI*(ell/s.ellA + 0.25);                  // phase (first peak near 0.75 ellA)
+    double mono = (1.0+R)*std::cos(x) - R;              // monopole, baryon-loaded
+    double vel  = std::sin(x)/std::sqrt(3.0*(1.0+R));   // Doppler (out of phase)
+    double silk = std::exp(-(ell/s.ellD)*(ell/s.ellD));
+    double prim = std::pow(ell/200.0, ns-1.0);          // primordial tilt
+    return prim*((mono*mono + vel*vel)*silk + 0.7);     // +0.7 = Sachs-Wolfe plateau
+}
+double Cl(double ell, const Scales& s, double ns) {
+    if (ell < 2.0) return 0.0;
+    return 2.0*PI*Dell(ell, s, ns)/(ell*(ell+1.0));
 }
 
 } // namespace
 
-void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed, double deltaNs) {
-    fprintf(stderr, "[CMB] synthesizing %dx%d map, lMax=%d, seed=%u, dNs=%+.3f ...\n",
-            W, H, lMax, seed, deltaNs);
+void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed,
+                      double omegaM, double omegaB, double hubble, double ns) {
+    Scales scales = computeScales(omegaM, omegaB, hubble);
+    fprintf(stderr, "[CMB] synth %dx%d lMax=%d seed=%u  Om=%.2f Ob=%.3f h=%.2f ns=%.3f  ellA=%.0f ...\n",
+            W, H, lMax, seed, omegaM, omegaB, hubble, ns, scales.ellA);
 
     auto idx = [](int l, int m) { return (size_t)l * (l + 1) / 2 + m; };
     const size_t ncoef = (size_t)(lMax + 1) * (lMax + 2) / 2;
@@ -48,9 +72,7 @@ void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed, doubl
     std::normal_distribution<double> N01(0.0, 1.0);
     std::vector<double> cc(ncoef, 0.0), cs(ncoef, 0.0);
     for (int l = 2; l <= lMax; ++l) {
-        // Re-tilt the primordial spectrum by deltaNs about ℓ=200 (the inflaton's
-        // n_s sets the slope; the baked transfer keeps the acoustic peaks).
-        double sig = std::sqrt(Cl(l) * std::pow((double)l / 200.0, deltaNs));
+        double sig = std::sqrt(Cl((double)l, scales, ns));
         for (int m = 0; m <= l; ++m) {
             cc[idx(l, m)] = sig * N01(rng);
             cs[idx(l, m)] = (m == 0) ? 0.0 : sig * N01(rng);

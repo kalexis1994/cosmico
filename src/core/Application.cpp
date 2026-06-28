@@ -443,9 +443,12 @@ void Application::mainLoop() {
                         const InflationStateData* ist = m_simulation->inflationState();
                         float ns = (ist && ist->spectralIndex > 0.8f && ist->spectralIndex < 1.2f)
                                  ? ist->spectralIndex : 0.96f;
-                        double deltaNs = ip.cmbCoupleNs
-                                       ? (double)(ns - 0.96f) * ip.cmbTiltExaggerate : 0.0;
-                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 900, ip.cmbSeed, deltaNs);
+                        // Effective n_s: couple to the inflaton's measured value
+                        // (exaggerated for visibility), else the fiducial 0.96.
+                        float nsEff = ip.cmbCoupleNs
+                                    ? 0.96f + (ns - 0.96f) * ip.cmbTiltExaggerate : 0.96f;
+                        synthesizeCMBMap(m_cmbData.data(), CMB_MAP_W, CMB_MAP_H, 900, ip.cmbSeed,
+                                         ip.cmbOmegaM, ip.cmbOmegaB, ip.cmbHubble, nsEff);
                         m_cmbSynthSeed = ip.cmbSeed;
                         m_cmbSynthResync = ip.cmbResync;
                     }

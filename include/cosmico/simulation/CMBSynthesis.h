@@ -10,10 +10,12 @@ namespace cosmico {
 // associated Legendre recurrence. Output is uint8, fluctuations centred at 128
 // (±3σ mapped to [0,255]). One-shot CPU; cache the result.
 //
-// deltaNs re-tilts the primordial spectrum: C_ℓ ·= (ℓ/200)^deltaNs. Pass
-// (n_s − 0.96) (optionally exaggerated) to couple the CMB to the inflaton's
-// measured spectral index — the acoustic peaks stay, the slope follows n_s.
+// The angular power spectrum C_ℓ is COMPUTED from the cosmological parameters
+// (Ω_m, Ω_b, h, n_s): a semi-analytic photon-baryon acoustic model whose scales
+// (sound horizon, damping, distance to last scattering) come from the
+// Eisenstein-Hu / Hu-Sugiyama fitting formulas. So the acoustic peaks move and
+// re-weight with the parameters — change Ω_b and the odd peaks grow, etc.
 void synthesizeCMBMap(uint8_t* out, int W, int H, int lMax, unsigned seed,
-                      double deltaNs = 0.0);
+                      double omegaM, double omegaB, double hubble, double ns);
 
 } // namespace cosmico
